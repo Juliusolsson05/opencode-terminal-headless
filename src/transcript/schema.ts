@@ -11,11 +11,23 @@
 // The expected columns are the ones the prepared statements in OpencodeStore
 // use — nothing more. Extra columns (OpenCode adds them in migrations) are fine;
 // a missing one is not.
+//
+// WHY this list is tested against a database built from it alone
+// (OpencodeStore.system.test.ts): a column a statement reads but this list
+// omits is a hole the gate cannot see. That happened once (a child-session
+// statement sorted on `session.time_created`; review R1-F3). The open now also
+// treats a statement that fails to prepare as an unsupported schema, but the
+// test is what keeps the gate's diagnostic ("table X is missing column Y")
+// the one users actually see. Add a column here in the same change that adds
+// a statement reading it. The deleted child-query sort no longer justified
+// session.time_created, but the Resume listSessions contract now returns the
+// creation timestamp (J2/J3 feature D). Its prepared SELECT is the reason this
+// column is required again; the gate must follow readers, not historical DDL.
 
 import type { SqliteDatabase } from './sqlite.js'
 
 export const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
-  session: ['id', 'parent_id', 'directory', 'title', 'time_updated'],
+  session: ['id', 'parent_id', 'directory', 'title', 'time_updated', 'time_created'],
   message: ['id', 'session_id', 'time_created', 'data'],
   part: ['id', 'message_id', 'data'],
   event: ['aggregate_id', 'seq', 'type', 'data'],

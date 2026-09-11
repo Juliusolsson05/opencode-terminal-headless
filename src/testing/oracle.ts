@@ -6,9 +6,47 @@
 // expectations come from two independent sources: OpenCode's projection (which
 // messages exist, which are complete, and their final content) and the event
 // log (when each message first appeared and when each assistant completed).
+//
+// WHY nothing here imports from src/transcript/ (review R3-F7): the expected
+// record used to be built with `buildMessageRecord`, the very function the
+// store uses, so every "commits the projection's content" assertion compared
+// the parser with itself, and a symmetric bug in part assembly (a dropped
+// tool `state`, a rewritten `type`) could bless itself in all three suites.
+// `expectedRecord` below is written from the record CONTRACT instead: the
+// shape `opencode export` and `GET /session/:id/message` return, with the ids
+// OpenCode keeps in columns put back (census invariant 8: `data` never carries
+// `id`/`sessionID`/`messageID`). records.test.ts checks the same contract
+// field by field against the fixture rows; keep both.
 
-import { buildMessageRecord, type OpencodeMessageRecord } from '../transcript/records.js'
 import type { DurableFixture } from './fixtures.js'
+
+/** The record contract, spelled out here rather than imported (see above). */
+export type ExpectedRecord = {
+  info: Record<string, unknown> & { id: string; sessionID: string; role: 'user' | 'assistant'; time: Record<string, unknown> }
+  parts: Array<Record<string, unknown> & { id: string; messageID: string; sessionID: string; type: string }>
+}
+
+/**
+ * The record OpenCode's projection implies for one message row and its part
+ * rows (`data` as stored, ids from the columns). Null for rows that are not a
+ * user or assistant message. Parts come back ordered by id, the order
+ * OpenCode itself reads them in (session/message-v2.ts: `orderBy(PartTable.id)`).
+ */
+export function expectedRecord(
+  sessionID: string,
+  message: { id: string; data: Record<string, unknown> },
+  parts: ReadonlyArray<{ id: string; data: Record<string, unknown> }>,
+): ExpectedRecord | null {
+  const role = message.data.role
+  if (role !== 'user' && role !== 'assistant') return null
+  const sorted = [...parts].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  return {
+    info: { ...message.data, id: message.id, sessionID, role, time: { ...(message.data.time as Record<string, unknown>) } },
+    parts: sorted
+      .filter(part => typeof part.data.type === 'string')
+      .map(part => ({ ...part.data, id: part.id, messageID: message.id, sessionID, type: part.data.type as string })),
+  }
+}
 
 export type CommitFacts = {
   /** Every id the durable tail must commit, exactly once. */
@@ -37,14 +75,11 @@ export type CommitFacts = {
   removedAfterCommit: Set<string>
 }
 
-export function projectionRecord(fixture: DurableFixture, messageID: string): OpencodeMessageRecord | null {
+/** The record a fixture's final projection implies for `messageID`. */
+export function projectionRecord(fixture: DurableFixture, messageID: string): ExpectedRecord | null {
   const row = fixture.messages.find(message => message.id === messageID)
   if (!row) return null
-  const parts = fixture.parts
-    .filter(part => part.message_id === messageID)
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map(part => ({ id: part.id, data: JSON.stringify(part.data) }))
-  return buildMessageRecord(fixture.meta.sessionID, { id: row.id, data: JSON.stringify(row.data) }, parts)
+  return expectedRecord(fixture.meta.sessionID, row, fixture.parts.filter(part => part.message_id === messageID))
 }
 
 export function commitFacts(fixture: DurableFixture): CommitFacts {

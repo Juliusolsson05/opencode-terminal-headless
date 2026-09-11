@@ -15,7 +15,7 @@
 // In WAL mode a read transaction is a stable snapshot and never blocks
 // OpenCode's writer.
 
-import { realpathSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 
 import { buildMessageRecord, type MessageRow, type OpencodeMessageRecord, type PartRow } from './records.js'
 import { checkSchema } from './schema.js'
@@ -31,21 +31,16 @@ export class OpencodeStoreError extends Error {
 }
 
 // Durable event types whose payload the reader consumes, with the only schema
-// version it understands. Every other type is scanned for its name only.
+// version it understands. Every other type is scanned for its name only: the
+// census saw `message.part.updated`, `session.created` and `session.updated`,
+// OpenCode's source also writes `message.part.removed` and `session.deleted`,
+// and the 1.18.30 binary defines newer names such as
+// `session.next.shell.started`. None of them decides a commit; a part update
+// only wakes a held assistant (CommittedAssembler).
 export const CONSUMED_EVENT_TYPES: Readonly<Record<string, number>> = {
   'message.updated': 1,
   'message.removed': 1,
 }
-
-// Types OpenCode 1.18.x writes that the reader deliberately ignores. Listed so
-// an unfamiliar name can be told apart from a familiar one (research doc).
-export const KNOWN_IGNORED_EVENT_NAMES: ReadonlySet<string> = new Set([
-  'message.part.updated',
-  'message.part.removed',
-  'session.created',
-  'session.updated',
-  'session.deleted',
-])
 
 export type DurableEvent = {
   seq: number
@@ -67,6 +62,7 @@ export type HistoryPage = { records: OpencodeMessageRecord[]; hasOlder: boolean 
 
 export type OpencodeReadTransaction = {
   cursor(sessionID: string): number
+  historyMessageIDs(sessionID: string): string[]
   eventsAfter(sessionID: string, afterSeq: number, limit: number): DurableEvent[]
   loadMessage(sessionID: string, messageID: string): OpencodeMessageRecord | null
 }
@@ -75,6 +71,12 @@ export type OpencodeStore = {
   readonly dbPath: string
   read<T>(fn: (tx: OpencodeReadTransaction) => T): T
   cursor(sessionID: string): number
+  /**
+   * One window of the session's projection, newest-first by window and
+   * oldest-first within it. `beforeMessageID` names the oldest message the
+   * host already has; when OpenCode has since removed it (a revert), the
+   * window continues below that id instead of ending (see the statement).
+   */
   readHistory(sessionID: string, opts?: { limit?: number; beforeMessageID?: string }): HistoryPage
   /**
    * Number of messages the session holds in OpenCode's projection. Hosts use
@@ -89,27 +91,35 @@ export type OpencodeStore = {
    */
   iterateMessages(sessionID: string, opts?: { pageSize?: number }): Generator<OpencodeMessageRecord, void, undefined>
   readSessionInfo(sessionID: string): OpencodeSessionInfo | null
-  readChildSessionIDs(sessionID: string): string[]
+  /** Root sessions for Resume; omit directory for the host's global listing. */
+  listSessions(opts: { directory?: string; limit: number }): Array<{ id: string; title: string; directory: string; timeUpdated: number; timeCreated: number }>
   release(): void
 }
 
 type Statements = {
   cursor: SqliteStatement
+  historyMessageIDs: SqliteStatement
   events: SqliteStatement
   message: SqliteStatement
   parts: SqliteStatement
   historyNewest: SqliteStatement
   historyAnchor: SqliteStatement
   historyBefore: SqliteStatement
+  historyBelowRemovedAnchor: SqliteStatement
   forwardAfter: SqliteStatement
   session: SqliteStatement
-  children: SqliteStatement
+  sessions: SqliteStatement
   count: SqliteStatement
 }
 
-type Entry = { db: SqliteDatabase; statements: Statements; refs: number; depth: number }
+type FileIdentity = { dev: bigint; ino: bigint }
+type Entry = { db: SqliteDatabase; statements: Statements; refs: number; depth: number; identity: FileIdentity }
 
 const registry = new Map<string, Entry>()
+// Old generations remain alive for existing leases after replacement. The
+// registry selects the current generation; this set counts actual connections.
+const connections = new Set<Entry>()
+const sameFile = (a: FileIdentity, b: FileIdentity): boolean => a.dev === b.dev && a.ino === b.ino
 
 const consumedTypeList = Object.entries(CONSUMED_EVENT_TYPES)
   .map(([name, version]) => `'${name}.${version}'`)
@@ -118,6 +128,16 @@ const consumedTypeList = Object.entries(CONSUMED_EVENT_TYPES)
 function prepareStatements(db: SqliteDatabase): Statements {
   return {
     cursor: db.prepare('SELECT seq FROM event_sequence WHERE aggregate_id = ?'),
+    // WHY seed from the projection, not the skipped event prefix: imported
+    // messages have no events, and OpenCode may rewrite any old user summary
+    // after positioning. History owns every existing prompt and completed
+    // answer. Incomplete assistants must remain eligible for live completion.
+    // Only ids cross into JS; one session scan happens once at pane startup.
+    historyMessageIDs: db.prepare(
+      `SELECT id FROM message WHERE session_id = ? AND
+       (json_extract(data, '$.role') = 'user' OR
+        (json_extract(data, '$.role') = 'assistant' AND json_type(data, '$.time.completed') IN ('integer', 'real')))`,
+    ),
     // WHY `data` only for consumed types: part updates dominate the log
     // (70,617 of 105,623 rows in the census) and carry tool output. SQLite
     // does not read a row's overflow pages unless the column is selected, so
@@ -136,6 +156,40 @@ function prepareStatements(db: SqliteDatabase): Statements {
       `SELECT id, data FROM message WHERE session_id = ? AND (time_created < ? OR (time_created = ? AND id < ?))
        ORDER BY time_created DESC, id DESC LIMIT ?`,
     ),
+    // WHY a second "before" statement keyed on the id alone: the host pages
+    // by naming the oldest message it already shows, and the only thing that
+    // removes a message OpenCode has written is a revert, which may take that
+    // very anchor with it. The anchor's time_created is then gone, and the
+    // (time_created, id) key above cannot be formed; answering "nothing older"
+    // stranded the host's scroll-back until a full reload (review R1-F6).
+    //
+    // WHY `id < anchor` is the right continuation: OpenCode mints message ids
+    // with `Identifier.ascending` (sst/opencode@v1.18.30
+    // packages/opencode/src/id/id.ts, the same module is in the installed
+    // 1.18.30 binary): the first 12 hex digits encode Date.now() * 0x1000
+    // plus a per-millisecond counter, so the ids it mints sort in creation
+    // order. A revert removes a suffix of the conversation (session/revert.ts
+    // `cleanup`; in 1.18.30 everything from the revert point to the end of
+    // the session's message list), so every survivor older than the removed
+    // anchor was minted before it and sorts below it. Checked on the
+    // recordings: in every durable fixture the ids OpenCode minted sort in
+    // (time_created, id) order (all 111 logged messages of ses_5a9eb743, and
+    // every message of the other six). Rows still come back in the usual
+    // (time_created, id) order, and the host's next request anchors on a row
+    // that exists, so paging returns to the exact key at once.
+    //
+    // What would make it wrong: ids OpenCode did not mint. `opencode import`
+    // keeps the ids it is given, and the 17-message imported prefix of
+    // ses_5a9eb743 carries 32-hex ids that do not sort by time. If this one
+    // fallback page reaches such a prefix, an imported message whose id
+    // happens to sort above the anchor is left out of it. That takes a revert
+    // past everything the host has loaded, in a session long enough to page,
+    // that began with an import. Exactness would need the host to carry the
+    // anchor's time_created as well (upstream's own page cursor encodes both:
+    // session/message-v2.ts `page`); nothing asks for that yet.
+    historyBelowRemovedAnchor: db.prepare(
+      'SELECT id, data FROM message WHERE session_id = ? AND id < ? ORDER BY time_created DESC, id DESC LIMIT ?',
+    ),
     // The same (time_created, id) order as history, walked forward from a
     // key rather than a message id, so a message removed between pages cannot
     // strand the walk (see iterateMessages).
@@ -144,7 +198,17 @@ function prepareStatements(db: SqliteDatabase): Statements {
        ORDER BY time_created, id LIMIT ?`,
     ),
     session: db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session WHERE id = ?'),
-    children: db.prepare('SELECT id FROM session WHERE parent_id = ? ORDER BY time_created'),
+    // WHY root-only and exact directory: task children are implementation
+    // details, not conversations the Resume picker should offer. Prefix path
+    // matching would mix adjacent projects. The optional directory also lets
+    // the host's global picker use this same source of truth (J2/J3 feature D).
+    // time_created is now required by this public contract; unlike the deleted
+    // child-query sort, it is a real reader of that column (see schema.ts).
+    sessions: db.prepare(
+      `SELECT id, title, directory, time_updated, time_created FROM session
+       WHERE parent_id IS NULL AND (? IS NULL OR directory = ?)
+       ORDER BY time_updated DESC, id DESC LIMIT ?`,
+    ),
     // Covered by message_session_time_created_id_idx; no table scan.
     count: db.prepare('SELECT count(*) AS n FROM message WHERE session_id = ?'),
   }
@@ -188,6 +252,9 @@ function makeTransaction(statements: Statements): OpencodeReadTransaction {
     cursor(sessionID) {
       const row = statements.cursor.get(sessionID)
       return row ? Number(row.seq) : -1
+    },
+    historyMessageIDs(sessionID) {
+      return statements.historyMessageIDs.all(sessionID).map(row => String(row.id))
     },
     eventsAfter(sessionID, afterSeq, limit) {
       return statements.events.all(sessionID, afterSeq, limit).map(row => {
@@ -250,9 +317,13 @@ class Handle implements OpencodeStore {
       let rows: Array<Record<string, unknown>>
       if (opts.beforeMessageID) {
         const anchor = statements.historyAnchor.get(opts.beforeMessageID, sessionID)
-        if (!anchor) return { records: [], hasOlder: false }
-        const created = Number(anchor.time_created) as SqliteValue
-        rows = statements.historyBefore.all(sessionID, created, created, opts.beforeMessageID, limit + 1)
+        if (anchor) {
+          const created = Number(anchor.time_created) as SqliteValue
+          rows = statements.historyBefore.all(sessionID, created, created, opts.beforeMessageID, limit + 1)
+        } else {
+          // The anchor was reverted away; see historyBelowRemovedAnchor.
+          rows = statements.historyBelowRemovedAnchor.all(sessionID, opts.beforeMessageID, limit + 1)
+        }
       } else {
         rows = statements.historyNewest.all(sessionID, limit + 1)
       }
@@ -282,6 +353,14 @@ class Handle implements OpencodeStore {
   // removed meanwhile is skipped rather than ending the walk, because the
   // cursor is a (time_created, id) key, not a row that must still exist.
   *iterateMessages(sessionID: string, opts: { pageSize?: number } = {}): Generator<OpencodeMessageRecord, void, undefined> {
+    // WHY 100 per page by default: a page is one short read transaction that
+    // materializes up to 100 records (each message with all of its parts, so
+    // tool output included) before the consumer sees the first one. Long agent
+    // turns carry tool parts of tens of kilobytes, so 100 keeps a page in the
+    // low megabytes, while a 1,000-message session still costs only ten
+    // transactions. Nothing depends on the exact value; the walk is correct for
+    // any size (the tests use 2 and 3 to force many page boundaries), and a
+    // caller with a different memory/latency trade passes `pageSize`.
     const pageSize = Math.max(1, Math.floor(opts.pageSize ?? 100))
     // time_created is epoch milliseconds, never negative, and every id sorts
     // after the empty string, so this key precedes the first message.
@@ -319,8 +398,14 @@ class Handle implements OpencodeStore {
     })
   }
 
-  readChildSessionIDs(sessionID: string): string[] {
-    return this.read(() => this.entry.statements.children.all(sessionID).map(row => String(row.id)))
+
+  listSessions(opts: { directory?: string; limit: number }): Array<{ id: string; title: string; directory: string; timeUpdated: number; timeCreated: number }> {
+    const directory = opts.directory ?? null
+    const limit = Math.max(1, Math.floor(opts.limit))
+    return this.read(() => this.entry.statements.sessions.all(directory, directory, limit).map(row => ({
+      id: String(row.id), title: String(row.title), directory: String(row.directory),
+      timeUpdated: Number(row.time_updated), timeCreated: Number(row.time_created),
+    })))
   }
 
   release(): void {
@@ -328,10 +413,27 @@ class Handle implements OpencodeStore {
     this.released = true
     this.entry.refs -= 1
     if (this.entry.refs === 0) {
-      registry.delete(this.key)
+      // An old lease must never evict the replacement opened at the same
+      // path: that would split its next opener into a third shared connection.
+      if (registry.get(this.key) === this.entry) registry.delete(this.key)
+      connections.delete(this.entry)
       try { this.entry.db.close() } catch { /* already closed */ }
     }
   }
+}
+
+/**
+ * How many shared connections are open, including leased old file generations.
+ *
+ * A test seam, deliberately narrow: whether two handles share one connection
+ * is the registry's whole point (the header above), and nothing in a handle's
+ * public API can observe it, because two separate connections would read the
+ * same rows just as well. Counting entries lets the realpath key be tested
+ * ("a symlinked path shares the handle") without reaching into module state.
+ * Nothing in production reads this; if a diagnostic ever needs it, promote it.
+ */
+export function openConnectionCount(): number {
+  return connections.size
 }
 
 /**
@@ -342,13 +444,20 @@ class Handle implements OpencodeStore {
  */
 export function openOpencodeStore(dbPath: string): OpencodeStore {
   let key: string
+  let identity: FileIdentity
   try {
     key = realpathSync(dbPath)
+    identity = statSync(key, { bigint: true })
   } catch (error) {
     throw new OpencodeStoreError('open_failed', `OpenCode database not found at ${dbPath}`, error)
   }
   let entry = registry.get(key)
-  if (!entry) {
+  // WHY path plus device/inode: replacing opencode.db does not revoke old
+  // leases. Sharing by path alone handed a host reopening after replacement
+  // the unlinked database forever while another pane retained a lease (R1-F10).
+  // New opens select a new generation; old handles keep their own connection
+  // until their final release. A symlink alias still shares the current file.
+  if (!entry || !sameFile(entry.identity, identity)) {
     let db: SqliteDatabase
     try {
       const { DatabaseSync } = loadSqlite()
@@ -357,26 +466,46 @@ export function openOpencodeStore(dbPath: string): OpencodeStore {
       if (error instanceof SqliteUnavailableError) throw new OpencodeStoreError('sqlite_unavailable', error.message, error)
       throw new OpencodeStoreError('open_failed', `Could not open OpenCode database read-only: ${error instanceof Error ? error.message : String(error)}`, error)
     }
-    // WHY SQLite errors here are translated, not reported as a schema
-    // mismatch: the schema check is the first read on a new connection, so
-    // it is where a transient BUSY (a writer recovering the WAL) lands. Calling
-    // that `unsupported_schema` told the caller to stop for good, when
+    // WHY the schema gate and statement preparation share one guard: the gate
+    // is only a promise that every statement will prepare, and a promise can
+    // have a hole. When it had one (a since-deleted child-session statement
+    // sorted on `session.time_created`, which the gate never listed; review
+    // R1-F3), preparing threw a raw `ERR_SQLITE_ERROR` out of this function
+    // and leaked the connection: the caller saw `open_failed` with no mention
+    // of the schema, and Agent Code, which deliberately does not cache a
+    // failed open, opened one more never-closed connection on every history
+    // call. Inside the guard, a statement that cannot prepare means exactly
+    // what a failed gate means.
+    //
+    // WHY BUSY is still translated rather than reported as a schema mismatch:
+    // the gate is the first read on a new connection, so it is where a
+    // transient BUSY (a writer recovering the WAL) lands. Calling that
+    // `unsupported_schema` would tell the caller to stop for good, when
     // retrying a moment later succeeds.
-    let schema: ReturnType<typeof checkSchema>
+    //
+    // Invariant: whatever is thrown from here, `db` is closed first. Nothing
+    // outside this block holds a reference to it until the registry does.
+    let statements: Statements
     try {
-      schema = checkSchema(db)
+      const schema = checkSchema(db)
+      if (!schema.ok) throw new OpencodeStoreError('unsupported_schema', `OpenCode database schema is not supported: ${schema.reason}`)
+      statements = prepareStatements(db)
+      // Refuse an open that straddled another replacement rather than tag a
+      // connection with an identity observed before it opened a different file.
+      // The caller can retry; the old registry entry remains untouched.
+      if (!sameFile(identity, statSync(key, { bigint: true }))) {
+        throw new OpencodeStoreError('open_failed', 'OpenCode database was replaced while opening; retry the open')
+      }
     } catch (error) {
-      try { db.close() } catch { /* ignore */ }
+      try { db.close() } catch { /* already closed */ }
+      if (error instanceof OpencodeStoreError) throw error
       const translated = translate(error, 'OpenCode schema check')
-      if (translated instanceof OpencodeStoreError) throw translated
+      if (translated instanceof OpencodeStoreError && translated.code === 'busy') throw translated
       throw new OpencodeStoreError('unsupported_schema', `OpenCode database schema is not supported: ${error instanceof Error ? error.message : String(error)}`, error)
     }
-    if (!schema.ok) {
-      try { db.close() } catch { /* ignore */ }
-      throw new OpencodeStoreError('unsupported_schema', `OpenCode database schema is not supported: ${schema.reason}`)
-    }
-    entry = { db, statements: prepareStatements(db), refs: 0, depth: 0 }
+    entry = { db, statements, refs: 0, depth: 0, identity }
     registry.set(key, entry)
+    connections.add(entry)
   }
   entry.refs += 1
   return new Handle(dbPath, key, entry)
