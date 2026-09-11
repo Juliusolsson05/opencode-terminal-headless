@@ -7,10 +7,29 @@
 // A literal typed into a test encodes the author's belief about that shape;
 // a recording encodes the shape itself.
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const FIXTURE_ROOT = fileURLToPath(new URL('../../testing/fixtures/', import.meta.url))
+// WHY this does not simply call fileURLToPath(import.meta.url): hosts run the
+// replay harness from DOM-emulating test projects (Agent Code's renderer tests
+// under happy-dom), and Vite's web transform rewrites `import.meta.url` there
+// to an http URL whose path is either `/@fs/<absolute path>` or relative to the
+// project root. Node's file APIs still work in those environments; only the URL
+// form differs, so the loader accepts all three shapes.
+function resolveFixtureRoot(): string {
+  const here = new URL('../../testing/fixtures/', import.meta.url)
+  if (here.protocol === 'file:') return fileURLToPath(here)
+  const pathname = decodeURIComponent(here.pathname)
+  const candidates = pathname.startsWith('/@fs/')
+    ? [pathname.slice('/@fs'.length)]
+    : [pathname, join(process.cwd(), pathname)]
+  const found = candidates.find(candidate => existsSync(candidate))
+  if (!found) throw new Error(`cannot locate opencode-terminal-headless fixtures from ${here.href}`)
+  return found.endsWith('/') ? found : `${found}/`
+}
+
+const FIXTURE_ROOT = resolveFixtureRoot()
 
 export type DurableFixtureRow = { seq: number; type: string; data: Record<string, unknown> }
 export type ProjectionMessageRow = { id: string; time_created: number; time_updated: number; data: Record<string, unknown> }

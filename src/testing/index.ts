@@ -12,3 +12,4 @@ export { listDurableFixtures, listLiveFixtures, loadDurableFixture, loadLiveFixt
 export { createProjectionDatabase, LiveFixtureWriter } from './fixtureDatabase.js'
 export { commitFacts, projectionRecord, type CommitFacts } from './oracle.js'
 export { buildReplayScript, FakePty, playReplay, ReplayServer, sessionRowFor, settle, waitUntil, type ReplayStep } from './replay.js'
+export { ensureAbortSignalTimeout, nodeHttpFetch } from './nodeHttpFetch.js'
