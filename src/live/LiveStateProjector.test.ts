@@ -75,6 +75,10 @@ describe('LiveStateProjector over recorded TUI sessions', () => {
         if (output.kind === 'turn-end') expect(kinds[index - 1]?.kind).toBe('durable-hint')
       })
     })
+
+    it(`${name}: a single-session run never looks like a session switch`, () => {
+      expect(kinds.filter(output => output.kind === 'session-switched')).toEqual([])
+    })
   }
 
   it('surfaces a recorded permission request from asked until replied, titled from its verb and patterns', () => {
@@ -101,11 +105,15 @@ describe('LiveStateProjector over recorded TUI sessions', () => {
     expect((requests[1]!.output as Extract<LiveOutput, { kind: 'requests' }>).question).toBeNull()
   })
 
-  it('ignores every event of a different session', () => {
+  it('keeps a different session\'s status, turns and requests out, and reports only that the TUI now drives it', () => {
+    // Seen from a pane bound to another session, this recording is the TUI
+    // prompting a root session (its `session.updated` carries no parentID)
+    // that is not the pane's: exactly the session-switch signal, and nothing
+    // else of that session may leak into the pane.
     const fixture = loadLiveFixture('permission-once.json')
     const projector = new LiveStateProjector('ses_someone_else')
     const outputs = fixture.sse.flatMap(({ event }) => projector.apply(event))
-    expect(outputs).toEqual([])
+    expect(outputs).toEqual([{ kind: 'session-switched', from: 'ses_someone_else', to: fixture.sessionID }])
   })
 
   it('keeps requests from a descendant session learned from session.created', () => {

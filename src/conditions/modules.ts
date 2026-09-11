@@ -59,9 +59,17 @@ export const questionModule = defineModule<'opencode.question', OpencodeConditio
     inputs.question
       ? { visible: true, questionID: inputs.question.questionID, text: inputs.question.text, metadata: inputs.question.metadata }
       : null,
-  // Reject-only, like the structured runtime: the user answers a question in
-  // the native TUI itself, where the option list is rendered. Rejecting from
-  // outside is the one action that is always safe to offer.
+  // Reject-only. WHY, and what the boundary is: the upstream protocol DOES
+  // take answers (`POST /question/:id/reply` with `answers`, sst/opencode@
+  // v1.18.30 packages/opencode/src/server/routes/instance/question.ts), and
+  // the sibling opencode-headless package exposes it as `replyQuestion`. What
+  // is reject-only is Agent Code's OpenCode condition surface (its structured
+  // runtime offers `opencode.question.reject` and nothing else), which this
+  // package matches byte for byte so both runtimes share one renderer policy.
+  // Here the user answers a question in the native TUI, where the option
+  // list is rendered; rejecting from outside is the one action that is always
+  // safe to offer without re-rendering that list. Adding an answer action is
+  // an Agent Code condition-surface change, not a protocol gap.
   actions: (state): ConditionAction[] => [
     { kind: 'custom', id: `${state.questionID}:reject`, label: 'Reject', name: QUESTION_REJECT_ACTION, payload: { questionID: state.questionID } },
   ],

@@ -97,37 +97,31 @@ export class SseStream extends EventEmitter {
     this.scheduleReconnect()
   }
 
+  // WHY an incremental line parser instead of normalising line endings per
+  // chunk: the SSE spec allows CRLF, LF and lone CR, and transport chunking is
+  // arbitrary. The previous parser rewrote a chunk-final "\r" to "\n" before
+  // it could see the next chunk; when that chunk began with the matching "\n"
+  // the pair became "\n\n", ended the event early, and both halves of a
+  // multi-line payload failed JSON parsing and were silently dropped. Here a
+  // chunk-final CR only records that a leading LF in the next chunk belongs to
+  // it, so every split point of a frame yields the same single event.
   private async read(body: ReadableStream<Uint8Array>): Promise<void> {
     const reader = body.getReader()
     const decoder = new TextDecoder()
-    let buffer = ''
+    const frame = new SseFrameParser(data => this.dispatchData(data))
     for (;;) {
       const { value, done } = await reader.read()
+      // A frame still open at end of stream is discarded, as the spec says:
+      // without its blank line it is not known to be complete.
       if (done) return
-      buffer += decoder.decode(value, { stream: true })
-      // Normalise CRLF so a frame boundary is always "\n\n" (the SSE spec
-      // allows \r\n, \n and \r line endings).
-      buffer = buffer.replace(/\r\n?/g, '\n')
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary >= 0) {
-        this.dispatchFrame(buffer.slice(0, boundary))
-        buffer = buffer.slice(boundary + 2)
-        boundary = buffer.indexOf('\n\n')
-      }
+      frame.push(decoder.decode(value, { stream: true }))
     }
   }
 
-  private dispatchFrame(frame: string): void {
-    const data: string[] = []
-    for (const line of frame.split('\n')) {
-      // Comment lines (": keep-alive") and non-data fields carry nothing the
-      // bus uses; OpenCode puts the event type inside the JSON payload.
-      if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''))
-    }
-    if (data.length === 0) return
+  private dispatchData(data: string): void {
     let parsed: unknown
     try {
-      parsed = JSON.parse(data.join('\n'))
+      parsed = JSON.parse(data)
     } catch {
       return
     }
@@ -151,5 +145,63 @@ export class SseStream extends EventEmitter {
       void this.connect()
     }, delay)
     this.retryTimer.unref?.()
+  }
+}
+
+/**
+ * SSE line and event framing (WHATWG HTML, "Server-sent events",
+ * interpreting an event stream), reduced to what the bus uses: `data` lines
+ * joined by "\n" and dispatched at a blank line. `event`, `id` and `retry`
+ * fields are ignored because OpenCode puts the event type inside the JSON
+ * payload and never resumes by id. Exported for the framing tests only.
+ */
+export class SseFrameParser {
+  private line = ''
+  private data: string[] = []
+  // The previous chunk ended in CR, so an LF opening the next chunk is the
+  // second half of that CRLF and not a line of its own.
+  private skipLeadingLF = false
+
+  constructor(private readonly dispatch: (data: string) => void) {}
+
+  push(text: string): void {
+    let start = 0
+    if (this.skipLeadingLF && text.length > 0) {
+      if (text[0] === '\n') start = 1
+      this.skipLeadingLF = false
+    }
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index]
+      if (char !== '\r' && char !== '\n') continue
+      this.line += text.slice(start, index)
+      this.endLine()
+      if (char === '\r') {
+        if (index + 1 < text.length) {
+          if (text[index + 1] === '\n') index += 1
+        } else {
+          this.skipLeadingLF = true
+        }
+      }
+      start = index + 1
+    }
+    this.line += text.slice(start)
+  }
+
+  private endLine(): void {
+    const line = this.line
+    this.line = ''
+    if (line === '') {
+      // A blank line dispatches the event; an event with no data lines (only
+      // comments such as ": keep-alive") dispatches nothing.
+      if (this.data.length > 0) this.dispatch(this.data.join('\n'))
+      this.data = []
+      return
+    }
+    if (line.startsWith(':')) return
+    const colon = line.indexOf(':')
+    const field = colon < 0 ? line : line.slice(0, colon)
+    if (field !== 'data') return
+    const value = colon < 0 ? '' : line.slice(colon + 1)
+    this.data.push(value.startsWith(' ') ? value.slice(1) : value)
   }
 }

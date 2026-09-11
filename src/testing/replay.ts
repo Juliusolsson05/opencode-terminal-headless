@@ -20,6 +20,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { performance } from 'node:perf_hooks'
 
 import type { PtyDisposable, PtyLike } from '../terminal/PtyBinding.js'
 import type { LiveFixtureWriter } from './fixtureDatabase.js'
@@ -99,10 +100,11 @@ export class ReplayServer {
   private server: Server | null = null
   private readonly streams = new Set<Stream>()
   private refusing = false
+  private blocking = false
   private readonly status = new Map<string, string>()
   private readonly permissions = new Map<string, Record<string, unknown>>()
   private readonly questions = new Map<string, Record<string, unknown>>()
-  private readonly failing = new Set<string>()
+  private readonly failing = new Map<string, number>()
   private readonly holds = new Map<string, (deliver: () => void) => void>()
   url = ''
 
@@ -115,8 +117,12 @@ export class ReplayServer {
     return this.url
   }
 
-  /** Send one bus event to every open stream and update the implied state. */
-  send(event: BusEvent): void {
+  /**
+   * Send one bus event to every open stream and update the implied state.
+   * Returns how many streams it was written to: 0 means nobody can receive it,
+   * so a caller waiting for the client to apply it must not wait.
+   */
+  send(event: BusEvent): number {
     const props = (event.properties ?? {}) as Record<string, unknown>
     if (event.type === 'session.status') {
       const type = (props.status as { type?: string } | undefined)?.type ?? 'idle'
@@ -129,6 +135,7 @@ export class ReplayServer {
     else if (event.type === 'question.replied' || event.type === 'question.rejected') this.questions.delete(String(props.requestID))
     const frame = `data: ${JSON.stringify(event)}\n\n`
     for (const stream of this.streams) stream.res.write(frame)
+    return this.streams.size
   }
 
   /** Close every open event stream (simulates a dropped connection). */
@@ -142,13 +149,22 @@ export class ReplayServer {
     this.refusing = refusing
   }
 
+  /**
+   * While blocking, EVERY request answers 418 before auth is checked: the
+   * unrelated process that won the TUI's port in port-conflict.json (the
+   * recording's probe blocker answered 418 on the contested port).
+   */
+  setBlocking(blocking: boolean): void {
+    this.blocking = blocking
+  }
+
   openStreamCount(): number {
     return this.streams.size
   }
 
-  /** While set, requests to `path` answer 500 (one endpoint of a re-sync failing). */
-  setFailing(path: string, failing: boolean): void {
-    if (failing) this.failing.add(path)
+  /** Fail one endpoint; status distinguishes a refused prompt from a transport failure. */
+  setFailing(path: string, failing: boolean, status = 500): void {
+    if (failing) this.failing.set(path, status)
     else this.failing.delete(path)
   }
 
@@ -196,12 +212,16 @@ export class ReplayServer {
       const authorized = this.authorized(req)
       const path = (req.url ?? '/').split('?')[0]!
       this.calls.push({ method: req.method ?? 'GET', path, body, authorized })
+      if (this.blocking) {
+        res.writeHead(418).end()
+        return
+      }
       if (!authorized) {
         res.writeHead(401).end()
         return
       }
       if (this.failing.has(path)) {
-        res.writeHead(500).end()
+        res.writeHead(this.failing.get(path)!).end()
         return
       }
       const hold = this.holds.get(path)
@@ -236,6 +256,12 @@ export class ReplayServer {
       if (req.method === 'GET' && path === '/question') return json([...this.questions.values()])
       if (req.method === 'POST' && /^\/permission\/[^/]+\/reply$/.test(path)) return json(true)
       if (req.method === 'POST' && /^\/question\/[^/]+\/reject$/.test(path)) return json(true)
+      if (req.method === 'POST' && /^\/session\/[^/]+\/prompt_async$/.test(path)) {
+        const send = () => { res.writeHead(204).end() }
+        if (hold) hold(send)
+        else send()
+        return
+      }
       res.writeHead(404).end()
     })
   }
@@ -270,15 +296,24 @@ export class FakePty implements PtyLike {
   }
 }
 
-/** Yield to the event loop long enough for sockets and microtasks to settle. */
+/**
+ * Yield to the event loop for `ms`. Use it only where a test proves a
+ * NEGATIVE ("nothing more happens") — there a slow machine can only make the
+ * assertion pass — never to wait for something to happen: use `waitUntil`.
+ */
 export async function settle(ms = 5): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * Poll `predicate` until it holds, or fail at a deadline. The deadline is on
+ * the monotonic clock: a wall-clock correction during a run must not shrink
+ * or stretch it.
+ */
 export async function waitUntil(predicate: () => boolean, timeoutMs = 5000, label = 'condition'): Promise<void> {
-  const deadline = Date.now() + timeoutMs
+  const deadline = performance.now() + timeoutMs
   while (!predicate()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`)
+    if (performance.now() > deadline) throw new Error(`timed out waiting for ${label}`)
     await settle(5)
   }
 }
@@ -286,8 +321,24 @@ export async function waitUntil(predicate: () => boolean, timeoutMs = 5000, labe
 export type ReplayOptions = {
   /** Called before each step; return false to pause (the test resumes by calling again). */
   beforeStep?: (step: ReplayStep, index: number) => Promise<void> | void
-  /** Delay between SSE steps so the client processes them one by one. */
+  /**
+   * Called after each bus event is sent, with the number of open streams it
+   * was written to. A host that can observe its client applying events
+   * resolves once this one was applied, which makes the replay strictly
+   * sequential: every durable row is then written after the client handled
+   * the bus event before it, exactly the order the recording implies.
+   * Without it the harness paces SSE steps by `stepDelayMs` and settles at
+   * the end, which is adequate on an idle machine but not a guarantee.
+   */
+  afterSse?: (step: Extract<ReplayStep, { kind: 'sse' }>, streams: number) => Promise<void> | void
+  /** Delay between SSE steps when `afterSse` is not given. */
   stepDelayMs?: number
+  /**
+   * Write the durable rows under this session id instead of the writer's own:
+   * a second session sharing one database file (the writer must already know
+   * it, see LiveFixtureWriter.addSession).
+   */
+  writeAs?: string
 }
 
 /** Play a script: durable rows through the writer, bus events through the server. */
@@ -295,17 +346,18 @@ export async function playReplay(script: readonly ReplayStep[], writer: LiveFixt
   for (let index = 0; index < script.length; index += 1) {
     const step = script[index]!
     await options.beforeStep?.(step, index)
-    if (step.kind === 'durable') writer.apply(step.row.type, step.row.data)
+    if (step.kind === 'durable') writer.apply(step.row.type, step.row.data, options.writeAs)
     else {
-      server.send(step.event)
-      await settle(options.stepDelayMs ?? 2)
+      const streams = server.send(step.event)
+      if (options.afterSse) await options.afterSse(step, streams)
+      else await settle(options.stepDelayMs ?? 2)
     }
   }
-  await settle(20)
+  if (!options.afterSse) await settle(20)
 }
 
 /** A session row satisfying OpenCode's NOT NULL columns, for recordings (which carry none). */
-export function sessionRowFor(sessionID: string): Record<string, unknown> {
+export function sessionRowFor(sessionID: string): Record<string, unknown> & { id: string } {
   const now = Date.now()
   return { id: sessionID, project_id: 'replay', slug: 'replay', directory: '/sandbox/project', title: 'replay', version: '1.18.30', time_created: now, time_updated: now }
 }

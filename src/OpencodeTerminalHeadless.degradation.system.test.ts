@@ -3,18 +3,19 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { allocateLoopbackPort } from './launch/port.js'
-import { useReplayRigs, startConnected, expectedCommits, indexOfKind, type LogEntry } from './testing/e2eRig.js'
+import { useReplayRigs, startConnected, expectedCommits, indexOfKind, replay, type LogEntry } from './testing/e2eRig.js'
 import { loadLiveFixture } from './testing/fixtures.js'
-import { buildReplayScript, playReplay, settle, waitUntil } from './testing/replay.js'
+import { buildReplayScript, settle, waitUntil } from './testing/replay.js'
 import { openOpencodeStore, OpencodeStoreError } from './transcript/OpencodeStore.js'
 import { loadSqlite } from './transcript/sqlite.js'
 
 // Losing a channel, or part of one, without reporting wrong data: dropped
-// streams and re-syncs, an unreachable server, a refused or busy database.
+// streams, an unreachable or foreign server, a refused or busy database.
+// Re-sync races have their own file (OpencodeTerminalHeadless.resync).
 //
 // Every expectation is derived from the recording itself (its status spans,
-// its durable rows, its request ids), never from the code under test. The
-// rig and oracles are shared in src/testing/e2eRig.ts.
+// its durable rows, its request ids, its notes and PTY exit), never from the
+// code under test. The rig and oracles are shared in src/testing/e2eRig.ts.
 
 const { rig, dir } = useReplayRigs()
 
@@ -24,7 +25,7 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     const r = await rig(recording)
     await startConnected(r)
     let dropped = false
-    await playReplay(buildReplayScript(recording), r.writer, r.server, {
+    await replay(r, buildReplayScript(recording), {
       beforeStep: async step => {
         // Drop the stream once the turn has visibly started (the prompt's own
         // parts arrive BEFORE busy, so waiting on the turn_started event — not
@@ -44,7 +45,7 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(r.headless.getActivity().active).toBe(true)
     r.server.setRefusing(false)
     await waitUntil(() => r.log.some(e => e.kind === 'semantic' && e.event.type === 'turn_completed'), 5000, 'turn end after re-sync')
-    await settle(60)
+    await waitUntil(() => r.headless.getLiveProgress().reconciled, 5000, 're-sync applied')
     const completeAt = indexOfKind(r.log, e => e.kind === 'semantic' && e.event.type === 'turn_completed')
     const answerAt = indexOfKind(r.log, e => e.kind === 'entry' && e.record.info.role === 'assistant')
     expect(answerAt).toBeGreaterThanOrEqual(0)
@@ -65,7 +66,7 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     const r = await rig(recording)
     await startConnected(r)
     let dropped = false
-    await playReplay(buildReplayScript(recording), r.writer, r.server, {
+    await replay(r, buildReplayScript(recording), {
       beforeStep: async step => {
         if (!dropped && step.kind === 'sse' && step.event.type === 'message.updated') {
           dropped = true
@@ -78,9 +79,10 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     const expected = expectedCommits(recording).ids
     const committed = () => new Set(r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id))
     await waitUntil(() => committed().size === expected.size, 3000, 'durable poll while disconnected')
+    const resyncs = r.headless.getLiveProgress().resyncs
     r.server.setRefusing(false)
-    await waitUntil(() => r.server.calls.filter(c => c.path === '/question').length >= 2, 5000, 're-sync after reconnect')
-    await settle(60)
+    // The reconnect's re-sync has applied: its verdict is final from here.
+    await waitUntil(() => r.headless.getLiveProgress().resyncs > resyncs && r.headless.getLiveProgress().reconciled, 5000, 're-sync after reconnect')
     expect(committed()).toEqual(expected)
     expect(r.log.some(e => e.kind === 'semantic' && e.event.type === 'turn_started')).toBe(false)
     expect(r.headless.getActivity().active).toBe(false)
@@ -103,6 +105,33 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(r.log.some(e => e.kind === 'activity' && e.active)).toBe(false)
   })
 
+  it('replays port-conflict.json: a foreign process on the port, reported unreachable, then the recorded SIGTERM exit', async () => {
+    // The recording: the TUI never served (0 SSE events, 0 durable rows, 0
+    // PTY bytes), the contested port answered 418 to every request (the
+    // probe's blocker), and the TUI was finally killed: exit code 0, signal 15.
+    const recording = loadLiveFixture('port-conflict.json')
+    expect(recording.sse).toEqual([])
+    expect(recording.notes.some(note => note.includes('answered 418'))).toBe(true)
+    const r = await rig(recording, { deadlineMs: 300 })
+    r.server.setBlocking(true)
+    await r.headless.start()
+    await waitUntil(() => r.log.some(e => e.kind === 'live-state' && e.reason === 'server-unreachable'), 3000, 'unreachable')
+    // The live channel really tried, and met the blocker.
+    expect(r.server.calls.some(c => c.path === '/event')).toBe(true)
+    expect(r.log.filter(e => e.kind === 'activity')).toEqual([])
+    expect(r.log.filter(e => e.kind === 'semantic')).toEqual([])
+    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
+    const exit = recording.pty.exit!
+    r.pty.exit(exit.exitCode, exit.signal)
+    await waitUntil(() => r.log.some(e => e.kind === 'exit'), 3000, 'exit reported')
+    const before = r.log.length
+    // Negative window: nothing may follow the exit, however late.
+    await settle(60)
+    expect(r.log.length).toBe(before)
+    expect(r.log.filter(e => e.kind === 'exit')).toEqual([{ kind: 'exit', exitCode: 0, signal: 15 }])
+    expect(r.log[r.log.length - 1]).toEqual({ kind: 'exit', exitCode: 0, signal: 15 })
+  })
+
   it('never connects with the wrong password, and says so', async () => {
     const r = await rig(loadLiveFixture('plain.json'), { password: 'not-the-password', deadlineMs: 300 })
     await r.headless.start()
@@ -120,7 +149,7 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     db.close()
     const r = await rig(recording, { dbPath: foreign })
     await startConnected(r)
-    await playReplay(buildReplayScript(recording), r.writer, r.server)
+    await replay(r, buildReplayScript(recording))
     await waitUntil(() => r.log.some(e => e.kind === 'semantic' && e.event.type === 'turn_completed'), 3000, 'turn end')
     const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error').map(e => e.error)
     expect(errors).toEqual([expect.objectContaining({ channel: 'durable', code: 'unsupported_schema' })])
@@ -145,9 +174,9 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     })
     await startConnected(r)
     await waitUntil(() => opened, 3000, 'durable open retried')
-    await playReplay(buildReplayScript(recording), r.writer, r.server)
+    await replay(r, buildReplayScript(recording))
     await waitUntil(() => r.log.some(e => e.kind === 'semantic' && e.event.type === 'turn_completed'), 5000, 'turn end')
-    await settle(60)
+    await waitUntil(() => !r.headless.getActivity().active, 3000, 'final idle')
     expect(r.log.filter(e => e.kind === 'error')).toEqual([])
     const ids = r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id)
     expect(new Set(ids)).toEqual(expectedCommits(recording).ids)
@@ -155,59 +184,6 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     const completeAt = indexOfKind(r.log, e => e.kind === 'semantic' && e.event.type === 'turn_completed')
     expect(indexOfKind(r.log, e => e.kind === 'entry' && e.record.info.role === 'assistant')).toBeLessThan(completeAt)
   })
-
-  it('ignores a re-sync snapshot that a newer connection has already superseded', async () => {
-    const recording = loadLiveFixture('plain.json')
-    const r = await rig(recording)
-    await startConnected(r)
-    const status = (type: string) => ({ type: 'session.status', properties: { sessionID: recording.sessionID, status: { type } } })
-    r.server.send(status('busy'))
-    await waitUntil(() => r.headless.getActivity().active, 3000, 'busy')
-
-    // Connection 1's re-sync reads "busy", but its answer is held back.
-    const stale = r.server.holdNext('/session/status')
-    r.server.dropStreams()
-    await stale.arrived
-    // Connection 1 drops as well, and the turn ends while nobody listens.
-    r.server.setRefusing(true)
-    r.server.dropStreams()
-    await waitUntil(() => r.log.filter(e => e.kind === 'live-state' && !e.connected).length >= 2, 3000, 'second disconnect')
-    r.server.send(status('idle'))
-    // Connection 2 re-syncs to idle and closes the turn.
-    r.server.setRefusing(false)
-    await waitUntil(() => !r.headless.getActivity().active, 5000, 'idle from the newer re-sync')
-    const turnsBefore = r.log.filter(e => e.kind === 'semantic' && e.event.type === 'turn_started').length
-
-    // Connection 1's stale "busy" finally arrives. It must not re-open the turn.
-    stale.release()
-    await settle(150)
-    expect(r.headless.getActivity().active).toBe(false)
-    expect(r.log.filter(e => e.kind === 'semantic' && e.event.type === 'turn_started').length).toBe(turnsBefore)
-  }, 20_000)
-
-  it('applies the parts of a re-sync that answered, and reports the rest as live state, not a transcript error', async () => {
-    const recording = loadLiveFixture('plain.json')
-    const r = await rig(recording)
-    await startConnected(r)
-    const status = (type: string) => ({ type: 'session.status', properties: { sessionID: recording.sessionID, status: { type } } })
-    r.server.send(status('busy'))
-    await waitUntil(() => r.headless.getActivity().active, 3000, 'busy')
-    // The stream drops, the turn ends unheard, and /question starts failing.
-    r.server.setRefusing(true)
-    r.server.dropStreams()
-    await waitUntil(() => r.log.some(e => e.kind === 'live-state' && !e.connected), 3000, 'disconnect')
-    r.server.send(status('idle'))
-    r.server.setFailing('/question', true)
-    r.server.setRefusing(false)
-    // The status part still ends the turn.
-    await waitUntil(() => !r.headless.getActivity().active, 5000, 'idle from a partial re-sync')
-    await waitUntil(
-      () => r.log.some(e => e.kind === 'live-state' && e.connected && (e.reason ?? '').startsWith('resync-incomplete') && (e.reason ?? '').includes('/question')),
-      3000,
-      'incomplete re-sync reported',
-    )
-    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
-  }, 20_000)
 
   it('reports a missing database path instead of guessing one', async () => {
     const r = await rig(loadLiveFixture('plain.json'), { dbPath: null })

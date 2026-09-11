@@ -10,6 +10,7 @@ export {
   OpencodeTerminalHeadless,
   type ConditionActionResult,
   type OpencodeActivity,
+  type OpencodeLiveProgress,
   type OpencodeTerminalError,
   type OpencodeTerminalHeadlessEvents,
   type OpencodeTerminalHeadlessOptions,
@@ -58,3 +59,4 @@ export type {
   SemanticTurnStartedEvent,
 } from './channels/types.js'
 export type { PendingPermission, PendingQuestion, StreamPhase } from './live/types.js'
+export type { SubmitPromptOptions, SubmitPromptResult } from './live/submitPrompt.js'

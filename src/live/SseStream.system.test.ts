@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { performance } from 'node:perf_hooks'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -29,10 +30,25 @@ async function listen(handler: (req: IncomingMessage, res: ServerResponse) => vo
   return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`
 }
 
+// Monotonic deadline: a wall-clock correction must not shrink or stretch it.
 const waitFor = async (predicate: () => boolean, ms = 3000) => {
-  const deadline = Date.now() + ms
-  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10))
+  const deadline = performance.now() + ms
+  while (!predicate() && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10))
   expect(predicate()).toBe(true)
+}
+
+/**
+ * The upstream instance middleware's directory rule (sst/opencode@v1.18.30
+ * packages/opencode/src/server/routes/instance/middleware.ts): the header is
+ * `decodeURIComponent`ed, and left as is if that throws.
+ */
+function upstreamDirectoryOf(req: IncomingMessage): string {
+  const raw = String(req.headers['x-opencode-directory'] ?? '')
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
 }
 
 describe('SseStream', () => {
@@ -54,7 +70,39 @@ describe('SseStream', () => {
     await waitFor(() => events.length === 2)
     expect(events.map(event => event.type)).toEqual(['server.connected', 'session.status'])
     expect(seen[0]!.authorization).toBe(`Basic ${Buffer.from('opencode:secret').toString('base64')}`)
-    expect(seen[0]!['x-opencode-directory']).toBe('/work/project')
+    expect(decodeURIComponent(String(seen[0]!['x-opencode-directory']))).toBe('/work/project')
+  })
+
+  it('reaches the instance for ASCII, non-Latin and literal-percent project directories over SSE and HTTP', async () => {
+    // A fake server applying the upstream decoding rule; the oracle is the
+    // directory the TUI was launched in, which the server must see verbatim.
+    const directories = ['/work/project', '/tmp/项目', '/tmp/work%20tree']
+    const seenDirectories: string[] = []
+    const base = await listen((req, res) => {
+      seenDirectories.push(upstreamDirectoryOf(req))
+      if (req.url === '/event') {
+        res.writeHead(200, { 'content-type': 'text/event-stream' })
+        res.write('data: {"type":"server.connected","properties":{}}\n\n')
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(req.url === '/session/status' ? '{}' : '[]')
+    })
+    for (const directory of directories) {
+      seenDirectories.length = 0
+      const client = new LiveServerClient({ baseUrl: base, username: 'opencode', password: 'pw', directory })
+      // Header construction itself must not throw (fetch headers are ByteStrings).
+      expect(() => new Headers(client.headers())).not.toThrow()
+      const events: LiveBusEvent[] = []
+      stream = new SseStream({ url: client.eventUrl(), headers: client.headers() })
+      stream.on('event', event => events.push(event))
+      stream.start()
+      await waitFor(() => events.length === 1)
+      const { failures } = await client.readResyncSnapshot()
+      expect(failures).toEqual([])
+      expect(seenDirectories).toEqual([directory, directory, directory, directory])
+      stream.stop()
+    }
   })
 
   it('reconnects after the server drops the stream, and reports the gap', async () => {

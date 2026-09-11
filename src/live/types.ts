@@ -34,6 +34,12 @@ export type LiveOutput =
   | { kind: 'requests'; permission: PendingPermission | null; question: PendingQuestion | null }
   | { kind: 'durable-hint' }
   | { kind: 'api-error'; message: string; turnId: string | null }
+  // The TUI started driving a different root session (see
+  // LiveStateProjector.observeUserMessage). Detection only: it changes no
+  // turn, request or durable state, so the composition hands it straight to
+  // the host instead of through the SessionSequencer, which has nothing to
+  // order it against.
+  | { kind: 'session-switched'; from: string; to: string }
 
 /** What a re-sync reads from the server after every (re)connect. */
 export type LiveResyncSnapshot = {
