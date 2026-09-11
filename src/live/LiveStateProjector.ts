@@ -128,23 +128,36 @@ export class LiveStateProjector {
     }
   }
 
-  /** Reconcile with what the server reports after a (re)connect. */
-  resync(snapshot: LiveResyncSnapshot): LiveOutput[] {
+  /**
+   * Reconcile with what the server reports after a (re)connect.
+   *
+   * Each domain is optional: the host omits one when live events for it
+   * arrived while the snapshot request was in flight, because the stream is
+   * then newer than the snapshot. Applying a stale status would re-open a turn
+   * that just ended; applying a stale request list would revive an answered
+   * permission.
+   */
+  resync(snapshot: Partial<LiveResyncSnapshot>): LiveOutput[] {
     const out: LiveOutput[] = []
-    const type = str(snapshot.status[this.sessionID]?.type)
-    // The status map lists only non-idle sessions ({} when idle).
-    if (type && type !== 'idle') out.push(...this.applyStatus(type, obj(snapshot.status[this.sessionID])))
-    else out.push(...this.endTurn())
-
-    this.permissions.clear()
-    for (const item of snapshot.permissions) {
-      const pending = permissionFromPayload(obj(item))
-      if (pending && (pending.sessionID === this.sessionID || this.isDescendant(pending.sessionID))) this.permissions.set(pending.requestID, pending)
+    if (snapshot.status) {
+      const type = str(snapshot.status[this.sessionID]?.type)
+      // The status map lists only non-idle sessions ({} when idle).
+      if (type && type !== 'idle') out.push(...this.applyStatus(type, obj(snapshot.status[this.sessionID])))
+      else out.push(...this.endTurn())
     }
-    this.questions.clear()
-    for (const item of snapshot.questions) {
-      const pending = questionFromPayload(obj(item))
-      if (pending && (pending.sessionID === this.sessionID || this.isDescendant(pending.sessionID))) this.questions.set(pending.questionID, pending)
+    if (snapshot.permissions) {
+      this.permissions.clear()
+      for (const item of snapshot.permissions) {
+        const pending = permissionFromPayload(obj(item))
+        if (pending && (pending.sessionID === this.sessionID || this.isDescendant(pending.sessionID))) this.permissions.set(pending.requestID, pending)
+      }
+    }
+    if (snapshot.questions) {
+      this.questions.clear()
+      for (const item of snapshot.questions) {
+        const pending = questionFromPayload(obj(item))
+        if (pending && (pending.sessionID === this.sessionID || this.isDescendant(pending.sessionID))) this.questions.set(pending.questionID, pending)
+      }
     }
     const requests = this.requestsOutput()
     if (requests) out.push(requests)
