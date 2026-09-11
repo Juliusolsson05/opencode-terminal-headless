@@ -1,0 +1,17 @@
+{
+  "_comment": "Source of truth for the OpenCode release this package has explicitly accepted as supported. The upstream-watch workflow compares npm's `latest` dist-tag of opencode-ai against `accepted`; a human bumps `accepted` only after a compatibility review. Never edited by automation. See support/README.md.",
+  "providers": {
+    "opencode": {
+      "label": "OpenCode",
+      "pkg": "opencode-ai",
+      "changelog": "https://github.com/sst/opencode/releases",
+      "accepted": "1.18.30",
+      "checkedAt": "2026-09-11",
+      "notes": [
+        "1.18.30 \u2014 the release the Stage 0 live recordings (testing/fixtures/live) were made against, and the one whose embedded source the commit rules were verified on. This package couples to PRIVATE surfaces, not a published API: the SQLite tables session/message/part/event/event_sequence with the columns listed in src/transcript/schema.ts REQUIRED_COLUMNS; the durable event types message.updated.1 and message.removed.1 (src/transcript/OpencodeStore.ts CONSUMED_EVENT_TYPES); the write orders of SessionProcessor, SessionPrompt.shellImpl and SessionPrompt.handleSubtask (src/transcript/CommittedAssembler.ts); and the TUI server's bus vocabulary and re-sync endpoints (src/live/). A release that renames a column or bumps a consumed event version fails closed (unsupported_schema / event_version_unsupported); one that changes a write order or a bus payload does not, which is why every drift needs the compatibility pass, not just a green suite.",
+        "Support floor is 1.18.27, the first release with the event table. The durable corpus was captured with CLI 1.18.30 from historical sessions whose creation/import stamps are 1.18.27, 1.18.29 and 0.0.0-agent-code; those stamps do not establish the binary that wrote each event. All live recordings were written by 1.18.30. See testing/fixtures/README.md.",
+        "The vendored upstream checkout under Agent Code's vendor/in_progress/opencode is 1.14.39, NOT 1.18.30. Where a write order matters, verify it against the installed binary (`strings ~/.opencode/bin/opencode`), as the R1 review did."
+      ]
+    }
+  }
+}

@@ -10,9 +10,15 @@ the provider event stream Agent Code consumes from every agent.
 
 This package exists to adapt OpenCode to one consumer's shape: Agent Code's
 headless provider contract. That is the same committed / semantic / screen
-channel model `claude-code-headless` and `codex-headless` expose, with the same
-turn, activity and condition events. It is built to match that shape and event
-stream, not to be a pleasant general-purpose way to drive OpenCode.
+channel model `claude-code-headless` and `codex-headless` expose, and the same
+semantic vocabulary (`turn_started`, `stream_phase`, `turn_completed`,
+`api_error` with `source: 'opencode-sse'`) and condition snapshot
+(`opencode.permission` / `opencode.question`). The instance events differ
+where OpenCode differs: `activity` carries `{ active, status }` instead of a
+label plus a separate `idle`, `entry` carries a committed `{ info, parts }`
+record and publishes the `opencode://session/<id>` locator on the committed
+channel, and there is no `event` union. It is built to match that shape and
+event stream, not to be a pleasant general-purpose way to drive OpenCode.
 
 If you are building your own OpenCode integration, use OpenCode's first-party
 surface instead: `opencode serve`, its HTTP API, its SSE bus, or the official
@@ -44,9 +50,13 @@ channels OpenCode already has, each owning different signals:
   row exists".
 - **Cheap polling when disconnected.** With the live channel down, the durable
   reader polls a primary-key lookup once a second.
-- **One ordering rule.** When a turn ends, the durable log is drained first,
-  so the committed answer always precedes `turn_completed`, the idle phase and
-  inactive activity.
+- **One ordering rule, with a bounded wait.** When a turn ends, the durable log
+  is drained first, so the committed answer precedes `turn_completed`, the idle
+  phase and inactive activity. The wait is bounded: if the database is still
+  BUSY, or an assistant message is still incomplete, after 2 seconds the turn
+  is completed anyway and the late entry is delivered when it commits. A turn
+  is never held open forever to preserve the ordering — a stuck database would
+  otherwise freeze the host's status forever.
 
 Every rule is argued from recorded evidence: a census of real sessions and
 sandboxed recordings of the real TUI. See
@@ -77,24 +87,36 @@ headless.on('activity', ({ active, status }) => {})     // busy / idle, with a s
 headless.on('semantic', event => {})                    // turn_started, stream_phase, turn_completed, api_error
 headless.on('entry', record => {})                      // committed { info, parts } message
 headless.on('conditions', snapshot => {})               // opencode.permission / opencode.question
-headless.on('transcript-error', error => {})            // the durable channel stopped, and why
+headless.on('transcript-error', error => {})            // durable failure or nonfatal sink/drain diagnostic
 headless.on('live-state', ({ connected, reason }) => {}) // unreachable, reconnected, re-sync incomplete
 headless.on('exit', ({ exitCode }) => {})
 await headless.start()                                  // returns immediately; never waits for the server
 
-headless.pasteAndSubmit('Explain this repository')      // bracketed paste + Enter, one write
+await headless.submitPrompt('Explain this repository')  // waits for connection + re-sync, then HTTP acceptance
 await headless.resolveConditionAction(action)           // answer a permission / reject a question over HTTP
 ```
 
 The class also exposes `semantic`, `screen` and `committed` channels in the
 sibling packages' shape, plus `getActivity()`, `getConditionSnapshot()` and
-`getProviderSessionId()`.
+`getProviderSessionId()`. `submitPrompt(text, { timeoutMs? })` uses the bound
+session's `/prompt_async` endpoint, preserving OpenCode's agent/model selection.
+It waits up to the connect deadline (30 seconds by default), including the
+request, and returns `{ ok: true }` on HTTP acceptance or `{ ok: false, reason,
+detail? }` with `no-live-channel`, `unreachable`, or `rejected`. `rejected`
+includes the HTTP status in `detail`. It never pastes or retries a POST;
+`pasteAndSubmit` remains available for host terminal-composer interactions.
+`getLiveProgress()` exposes connection and re-sync progress for diagnostics
+and test synchronization.
 
 `openOpencodeStore(dbPath)` reads history without a running TUI:
 `readHistory(sessionID, { limit, beforeMessageID })` pages back from the
 newest message, `iterateMessages(sessionID)` walks the whole session forward a
 page at a time, and `countMessages(sessionID)` gives the total. Agent Code uses
 them for parked agents and MCP transcript reads.
+`listSessions({ directory?, limit })` lists resumable sessions newest-first —
+root sessions only, because a task child is an implementation detail of its
+parent's turn and is not something a user can resume. Omitting `directory`
+lists every project, which is what a global "recent sessions" control needs.
 
 OpenCode has no transcript file, so where file-backed providers publish a JSONL
 path this package publishes `opencode://session/<id>`
@@ -117,6 +139,12 @@ produces wrong data.
   'server-unreachable' }` after the connect deadline. The usual cause is a lost
   port race, which leaves the TUI neither exiting nor painting. Committed
   messages keep arriving through the durable poll.
+- **A TUI that exits with the log still behind**: the final drain gets the same
+  bounded wait. If it cannot finish, `transcript-error` with
+  `final_drain_incomplete` is emitted *before* `exit`, so the host knows the
+  transcript it holds may be missing the last message rather than silently
+  trusting it. Like `sink_failed` (a host listener that threw), this is a
+  diagnostic, not a channel stop.
 - **A dropped connection**: reconnect with backoff, then re-sync status and
   pending requests. A turn that ended while nobody was listening is closed with
   its answer first. Only the newest connection's re-sync is applied. If some
@@ -148,14 +176,22 @@ OPENCODE_TERMINAL_HEADLESS_LIVE=1 NODE_PTY_PATH=… npm run test:live   # the re
   - `testing/fixtures/durable/` holds sanitised real sessions: keys, enums,
     ids and timestamps are kept, free text is replaced.
   - `testing/fixtures/live/` holds sandboxed TUI recordings.
-  - Regenerate with `npm run census -- --db <opencode.db> --extract …` and
-    `npm run probe:live`.
+  - Regenerate with
+    `npm run census -- --db <opencode.db> --extract … --recorded-with <version>`
+    and `npm run probe:live`. `--recorded-with` is required: a fixture's
+    `meta.recordedWith` must name the OpenCode build that actually wrote those
+    rows, and no reliable version marker exists inside the database itself.
+    Guessing it would quietly invalidate every upstream-drift comparison.
 - **No oracle is the reader.** Durable tests check against OpenCode's own
   projection. Live tests check against each recording's own status events.
 - **Replay harness.** `src/testing/` re-enacts recordings over a real socket
-  and a real database. Hosts that compile this package from source (as Agent
-  Code does) can import it from `opencode-terminal-headless/testing/index` to
-  integration-test their adapters against the same behavior.
+  and a real database, so a host can integration-test its adapter against the
+  same behavior. It is **source-only and not published**: `dist/` never
+  contains it (`tsconfig.build.json` excludes `src/testing/**`), and the
+  package declares no `testing` entry point. Agent Code reaches it through a
+  bundler and `tsconfig` alias that maps `opencode-terminal-headless/testing`
+  to `src/testing/index.ts` of the checked-out submodule; any other host
+  needs an equivalent alias into the source tree.
 
 ## License
 

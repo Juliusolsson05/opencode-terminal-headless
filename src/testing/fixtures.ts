@@ -35,8 +35,12 @@ export type DurableFixtureRow = { seq: number; type: string; data: Record<string
 export type ProjectionMessageRow = { id: string; time_created: number; time_updated: number; data: Record<string, unknown> }
 export type ProjectionPartRow = { id: string; message_id: string; time_created: number; time_updated: number; data: Record<string, unknown> }
 
+// recordedWith is the observed CLI at capture, not session.version (which
+// may be an import stamp). schemaVersion fingerprints the replay DDL artifact.
+export type FixtureMetadata = { recordedWith: string; schemaVersion: string }
+
 export type DurableFixture = {
-  meta: { sessionID: string; parentID: string | null; opencodeVersion: string | null; flags: Record<string, boolean> }
+  meta: FixtureMetadata & { sessionVersion: string | null; sessionID: string; parentID: string | null; opencodeVersion: string | null; flags: Record<string, boolean> }
   session: Record<string, unknown>
   sequence: { aggregate_id: string; seq: number; owner_id: string | null } | null
   events: DurableFixtureRow[]
@@ -45,6 +49,7 @@ export type DurableFixture = {
 }
 
 export type LiveFixture = {
+  meta: FixtureMetadata
   scenario: string
   opencodeVersion: string
   sessionID: string

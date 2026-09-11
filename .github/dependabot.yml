@@ -1,0 +1,44 @@
+# Routine majors remain manual so upstream CLI compatibility changes are reviewed
+# explicitly. Security updates are grouped separately and remain eligible even
+# when remediation requires crossing a major-version boundary.
+# Copied from claude-code-headless; the schedule is offset so the three
+# headless packages do not all open PRs in the same minute.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "08:00"
+      timezone: "Europe/Stockholm"
+    open-pull-requests-limit: 3
+    groups:
+      security-updates:
+        applies-to: "security-updates"
+        patterns:
+          - "*"
+      minor-and-patch:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "08:30"
+      timezone: "Europe/Stockholm"
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"

@@ -29,6 +29,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
+import { fixtureMeta } from './lib/fixtureMeta.mjs'
+
 import { loadSqlite, type SqliteDatabase } from '../src/transcript/sqlite.js'
 
 const execFileAsync = promisify(execFile)
@@ -81,6 +83,7 @@ async function allocatePort(): Promise<number> {
 }
 
 type Recording = {
+  meta: ReturnType<typeof fixtureMeta>
   scenario: string
   opencodeVersion: string
   model: string
@@ -174,7 +177,7 @@ class ScenarioRun {
 
   constructor(readonly scenario: string, readonly args: Args, readonly sandbox: Sandbox, readonly env: Record<string, string>, version: string, sessionID: string) {
     this.rec = {
-      scenario, opencodeVersion: version, model: args.model, sessionID, notes: [], sse: [], durable: [], http: [], prompts: [],
+      meta: fixtureMeta(version), scenario, opencodeVersion: version, model: args.model, sessionID, notes: [], sse: [], durable: [], http: [], prompts: [],
       pty: { firstOutputAt: null, bytes: 0, exit: null, tail: '' },
     }
   }

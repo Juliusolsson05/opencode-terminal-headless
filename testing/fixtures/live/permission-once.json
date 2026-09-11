@@ -1,4 +1,10 @@
 {
+  "meta": {
+    "recordedWith": "1.18.30",
+    "schemaVersion": "sha256:12ad10dcb7bd9b4abf67094c6bbddd01272fd5fa03ce5c5d41519e4959753ff9",
+    "purpose": "Sandboxed native TUI bus and durable ordering recording",
+    "redaction": "Throwaway HOME/XDG and project; synthetic prompts; sandbox paths and ports normalised"
+  },
   "scenario": "permission-once",
   "opencodeVersion": "1.18.30",
   "model": "opencode/big-pickle",

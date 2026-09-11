@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto'
+
 import { describe, expect, it } from 'vitest'
 
-import { listDurableFixtures, listLiveFixtures, loadDurableFixture, loadLiveFixture } from './fixtures.js'
+import { listDurableFixtures, listLiveFixtures, loadDurableFixture, loadLiveFixture, loadSchemaSql } from './fixtures.js'
 
 // These tests guard the corpus itself, not the reader. A fixture that is not
 // self-consistent would make every reader test built on it meaningless: the
@@ -87,5 +89,22 @@ describe('live fixtures', () => {
       expect(statuses).toContain('busy')
       expect(statuses[statuses.length - 1]).toBe('idle')
     })
+  }
+})
+
+// Pin the schema bytes, not merely a format number: a changed snapshot must
+// trigger an explicit corpus review rather than silently changing replay DDL.
+it('every recording names its capture release and fingerprints the replay schema', () => {
+  const schemaVersion = `sha256:${createHash('sha256').update(loadSchemaSql()).digest('hex')}`
+  for (const name of listDurableFixtures()) {
+    const fixture = loadDurableFixture(name)
+    expect(fixture.meta.recordedWith, name).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(fixture.meta.schemaVersion, name).toBe(schemaVersion)
+    expect(fixture.meta.sessionVersion, name).toBe(fixture.meta.opencodeVersion)
+  }
+  for (const name of listLiveFixtures()) {
+    const fixture = loadLiveFixture(name)
+    expect(fixture.meta.recordedWith, name).toBe(fixture.opencodeVersion)
+    expect(fixture.meta.schemaVersion, name).toBe(schemaVersion)
   }
 })

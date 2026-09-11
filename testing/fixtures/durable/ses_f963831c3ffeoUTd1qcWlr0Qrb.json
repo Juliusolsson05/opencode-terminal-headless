@@ -1,5 +1,8 @@
 {
   "meta": {
+    "recordedWith": "1.18.30",
+    "schemaVersion": "sha256:12ad10dcb7bd9b4abf67094c6bbddd01272fd5fa03ce5c5d41519e4959753ff9",
+    "sessionVersion": "1.18.27",
     "sessionID": "ses_f963831c3ffeoUTd1qcWlr0Qrb",
     "parentID": "ses_7613855d2c1a4351a30d0909c4fe47a6",
     "opencodeVersion": "1.18.27",

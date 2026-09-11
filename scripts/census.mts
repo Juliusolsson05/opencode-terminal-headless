@@ -2,7 +2,7 @@
 //
 // Usage:
 //   npm run census -- --db ~/.local/share/opencode/opencode.db [--json out.json]
-//   npm run census -- --db <path> --extract testing/fixtures/durable [--sessions ses_a,ses_b]
+//   npm run census -- --db <path> --extract testing/fixtures/durable --recorded-with <version> [--sessions ses_a,ses_b]
 //
 // WHY this script exists before any reader code: the durable reader decides
 // WHEN a message is committed from the order of OpenCode's event rows. Those
@@ -17,9 +17,10 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { loadSqlite, type SqliteDatabase, type SqliteRow } from '../src/transcript/sqlite.js'
+import { fixtureMeta } from './lib/fixtureMeta.mjs'
 import { sanitize } from './lib/sanitize.mjs'
 
-type Args = { db: string; json?: string; extract?: string; sessions?: string[] }
+type Args = { db: string; json?: string; extract?: string; sessions?: string[]; recordedWith?: string }
 
 function parseArgs(argv: string[]): Args {
   const out: Partial<Args> = {}
@@ -29,9 +30,11 @@ function parseArgs(argv: string[]): Args {
     if (flag === '--db' && value) { out.db = value; i += 1 }
     else if (flag === '--json' && value) { out.json = value; i += 1 }
     else if (flag === '--extract' && value) { out.extract = value; i += 1 }
+    else if (flag === '--recorded-with' && value) { out.recordedWith = value; i += 1 }
     else if (flag === '--sessions' && value) { out.sessions = value.split(','); i += 1 }
   }
   if (!out.db) throw new Error('--db <path to opencode.db> is required')
+  if (out.extract && !/^\d+\.\d+\.\d+$/.test(out.recordedWith ?? '')) throw new Error('--extract requires --recorded-with <observed opencode --version>; session.version is not capture provenance')
   return out as Args
 }
 
@@ -303,7 +306,7 @@ function mapToObject<K extends string | number>(map: Map<K, number>): Record<str
   return Object.fromEntries([...map.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => [String(k), v]))
 }
 
-async function extractFixtures(db: SqliteDatabase, dir: string, sessions: SessionReport[]): Promise<string[]> {
+async function extractFixtures(db: SqliteDatabase, dir: string, sessions: SessionReport[], recordedWith: string): Promise<string[]> {
   await mkdir(dir, { recursive: true })
   const written: string[] = []
   for (const session of sessions) {
@@ -317,6 +320,10 @@ async function extractFixtures(db: SqliteDatabase, dir: string, sessions: Sessio
     const sequence = db.prepare('SELECT aggregate_id, seq, owner_id FROM event_sequence WHERE aggregate_id = ?').get(session.id) ?? null
     const fixture = {
       meta: {
+        ...fixtureMeta(recordedWith),
+        // Legacy opencodeVersion is retained for older harness consumers.
+        // Both it and sessionVersion are the creation/import stamp only.
+        sessionVersion: session.version,
         sessionID: session.id,
         parentID: session.parentID,
         opencodeVersion: session.version,
@@ -416,7 +423,7 @@ async function main(): Promise<void> {
       const selected = args.sessions
         ? reports.filter(report => args.sessions?.includes(report.id))
         : selectCoverage(reports)
-      const files = await extractFixtures(db, args.extract, selected)
+      const files = await extractFixtures(db, args.extract, selected, args.recordedWith!)
       console.error(`wrote ${files.length} fixtures to ${args.extract}`)
     }
   } finally {
