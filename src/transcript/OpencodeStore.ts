@@ -76,6 +76,12 @@ export type OpencodeStore = {
   read<T>(fn: (tx: OpencodeReadTransaction) => T): T
   cursor(sessionID: string): number
   readHistory(sessionID: string, opts?: { limit?: number; beforeMessageID?: string }): HistoryPage
+  /**
+   * Number of messages the session holds in OpenCode's projection. Hosts use
+   * it where a JSONL provider reports its record count (Agent Code's scroll
+   * indicator and its "has this session written anything yet" check).
+   */
+  countMessages(sessionID: string): number
   readSessionInfo(sessionID: string): OpencodeSessionInfo | null
   readChildSessionIDs(sessionID: string): string[]
   release(): void
@@ -91,6 +97,7 @@ type Statements = {
   historyBefore: SqliteStatement
   session: SqliteStatement
   children: SqliteStatement
+  count: SqliteStatement
 }
 
 type Entry = { db: SqliteDatabase; statements: Statements; refs: number; depth: number }
@@ -124,6 +131,8 @@ function prepareStatements(db: SqliteDatabase): Statements {
     ),
     session: db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session WHERE id = ?'),
     children: db.prepare('SELECT id FROM session WHERE parent_id = ? ORDER BY time_created'),
+    // Covered by message_session_time_created_id_idx; no table scan.
+    count: db.prepare('SELECT count(*) AS n FROM message WHERE session_id = ?'),
   }
 }
 
@@ -243,6 +252,10 @@ class Handle implements OpencodeStore {
       }
       return { records, hasOlder }
     })
+  }
+
+  countMessages(sessionID: string): number {
+    return this.read(() => Number(this.entry.statements.count.get(sessionID)?.n ?? 0))
   }
 
   readSessionInfo(sessionID: string): OpencodeSessionInfo | null {

@@ -60,6 +60,19 @@ describe('OpencodeStore', () => {
     }
   })
 
+  it('counts the projection\'s messages for a session, including an imported prefix the log never saw', () => {
+    const fixture = byName('ses_5a9eb743')
+    const file = join(dir, 'opencode.db')
+    createProjectionDatabase(fixture, file)
+    const store = openOpencodeStore(file)
+    try {
+      expect(store.countMessages(fixture.meta.sessionID)).toBe(fixture.messages.length)
+      expect(store.countMessages('ses_unknown')).toBe(0)
+    } finally {
+      store.release()
+    }
+  })
+
   it('reports the sequence head as the tail cursor, and -1 for a session with no log', () => {
     const fixture = byName('ses_47fca639')
     const file = join(dir, 'opencode.db')
