@@ -1,5 +1,16 @@
 # opencode-terminal-headless — initial runtime plan
 
+Status: P0–P5 implemented on `feat/initial-runtime`. Stage 0 findings are in
+`research/census-2026-09-10.md` and changed three rules from this plan's first
+draft:
+- one live turn is a whole busy→idle span, not one assistant message
+- a prompt commits at its first answer or the next queued prompt's answer
+- the live channel needs a connect deadline
+
+The integration suites (`*.system.test.ts`, the recorded replays) and the
+opt-in live test against the real TUI were added at the user's request, so that
+no layer is verified only against the author's own picture of OpenCode.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the PTY headless package that reads the native OpenCode TUI's channels into the provider event shape Agent Code consumes: committed `{ info, parts }` messages, activity, turns, stream phases, and permission/question conditions.
