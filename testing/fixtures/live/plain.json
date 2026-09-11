@@ -1,0 +1,2227 @@
+{
+  "scenario": "plain",
+  "opencodeVersion": "1.18.30",
+  "model": "opencode/big-pickle",
+  "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+  "notes": [
+    "[8ms] spawn opencode --session ses_4a78e376f6d341bd83ea72d98c647908 --hostname 127.0.0.1 --port 55927",
+    "[8667.9ms] server healthy (200)",
+    "[8739.9ms] sse connected (200)",
+    "[18852.8ms] pasted prompt (33 chars)",
+    "[32292.7ms] tui exited code=0 signal=0"
+  ],
+  "sse": [
+    {
+      "t": 8740.4,
+      "event": {
+        "id": "evt_08e0b1680001R8AIv3R1WUaSpr",
+        "type": "server.connected",
+        "properties": {}
+      }
+    },
+    {
+      "t": 19791.3,
+      "event": {
+        "id": "evt_08e0b3fc1001Q3rGSsljzdqdyx",
+        "type": "plugin.added",
+        "properties": {
+          "id": "core/config-reference"
+        }
+      }
+    },
+    {
+      "t": 19791.3,
+      "event": {
+        "id": "evt_08e0b3fe1001YgxGTq2guPtttB",
+        "type": "plugin.added",
+        "properties": {
+          "id": "agent"
+        }
+      }
+    },
+    {
+      "t": 19791.4,
+      "event": {
+        "id": "evt_08e0b3fee001Cce0tgR44CKpAS",
+        "type": "plugin.added",
+        "properties": {
+          "id": "command"
+        }
+      }
+    },
+    {
+      "t": 19791.4,
+      "event": {
+        "id": "evt_08e0b4006001k014DWUeFx4B8R",
+        "type": "plugin.added",
+        "properties": {
+          "id": "skill"
+        }
+      }
+    },
+    {
+      "t": 19791.5,
+      "event": {
+        "id": "evt_08e0b4011001DICxRtjIH9c5V2",
+        "type": "plugin.added",
+        "properties": {
+          "id": "models-dev"
+        }
+      }
+    },
+    {
+      "t": 19791.5,
+      "event": {
+        "id": "evt_08e0b4013001xCgE0BF2LveLd4",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-agent"
+        }
+      }
+    },
+    {
+      "t": 19791.5,
+      "event": {
+        "id": "evt_08e0b4014001ZOGKg2HSpG72YP",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-command"
+        }
+      }
+    },
+    {
+      "t": 19791.5,
+      "event": {
+        "id": "evt_08e0b4017001lmLznJ5sccjTo0",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-skill"
+        }
+      }
+    },
+    {
+      "t": 19791.6,
+      "event": {
+        "id": "evt_08e0b401d001k8xZjibnZKDsJs",
+        "type": "plugin.added",
+        "properties": {
+          "id": "alibaba"
+        }
+      }
+    },
+    {
+      "t": 19791.6,
+      "event": {
+        "id": "evt_08e0b4020001lIE2zMScqVkAdx",
+        "type": "plugin.added",
+        "properties": {
+          "id": "amazon-bedrock"
+        }
+      }
+    },
+    {
+      "t": 19791.6,
+      "event": {
+        "id": "evt_08e0b4022001gA3pj6IQMVD8ud",
+        "type": "plugin.added",
+        "properties": {
+          "id": "anthropic"
+        }
+      }
+    },
+    {
+      "t": 19791.6,
+      "event": {
+        "id": "evt_08e0b4025001fGffrmYd1QDnVq",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure-cognitive-services"
+        }
+      }
+    },
+    {
+      "t": 20065,
+      "event": {
+        "id": "evt_08e0b42780019MxIiyxjigr11d",
+        "type": "server.heartbeat",
+        "properties": {}
+      }
+    },
+    {
+      "t": 20065,
+      "event": {
+        "id": "evt_08e0b418c001majzRuO4wnYIG5",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure"
+        }
+      }
+    },
+    {
+      "t": 20065,
+      "event": {
+        "id": "evt_08e0b418e0010dwKu1CEt463Fr",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cerebras"
+        }
+      }
+    },
+    {
+      "t": 20065,
+      "event": {
+        "id": "evt_08e0b418f001tfeog1Xd1iKWfa",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-ai-gateway"
+        }
+      }
+    },
+    {
+      "t": 20065,
+      "event": {
+        "id": "evt_08e0b41930013vDfAVXS4LBl0I",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-workers-ai"
+        }
+      }
+    },
+    {
+      "t": 20065.2,
+      "event": {
+        "id": "evt_08e0b419500174Bb7qolaGHcJv",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cohere"
+        }
+      }
+    },
+    {
+      "t": 20065.3,
+      "event": {
+        "id": "evt_08e0b4198001wXFd45HwKtMFUX",
+        "type": "plugin.added",
+        "properties": {
+          "id": "deepinfra"
+        }
+      }
+    },
+    {
+      "t": 20065.3,
+      "event": {
+        "id": "evt_08e0b419b001ov4HR98ESUWzLW",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gateway"
+        }
+      }
+    },
+    {
+      "t": 20065.3,
+      "event": {
+        "id": "evt_08e0b419c001qbSJCsuWyrnqZe",
+        "type": "plugin.added",
+        "properties": {
+          "id": "github-copilot"
+        }
+      }
+    },
+    {
+      "t": 20065.3,
+      "event": {
+        "id": "evt_08e0b419c002lZGH42WZy7OYmK",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gitlab"
+        }
+      }
+    },
+    {
+      "t": 20065.4,
+      "event": {
+        "id": "evt_08e0b419d001Y7IfIRAPBr7MMH",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google"
+        }
+      }
+    },
+    {
+      "t": 20065.4,
+      "event": {
+        "id": "evt_08e0b419d002pZpM5eDkL0GPPD",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex-anthropic"
+        }
+      }
+    },
+    {
+      "t": 20065.4,
+      "event": {
+        "id": "evt_08e0b419e001c1RGf68wOub90a",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex"
+        }
+      }
+    },
+    {
+      "t": 20065.5,
+      "event": {
+        "id": "evt_08e0b422e001KEzQZ6serBHMWb",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089474468,
+              "updated": 1789089497643
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 20065.5,
+      "event": {
+        "id": "evt_08e0b4249001jdl1GwT62LpTBe",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "msg_08e0b422b001BbTQEPDh2O7xea",
+            "role": "user",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "time": {
+              "created": 1789089497643
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "big-pickle"
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 20065.6,
+      "event": {
+        "id": "evt_08e0b42570016cXhtNx3FrxRPz",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "part": {
+            "type": "text",
+            "text": "Reply with exactly one word: pong",
+            "messageID": "msg_08e0b422b001BbTQEPDh2O7xea",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "id": "prt_08e0b4245001oBw4nlmhBeyXqn"
+          },
+          "time": 1789089497687
+        }
+      }
+    },
+    {
+      "t": 20065.7,
+      "event": {
+        "id": "evt_08e0b426c001Tu1JUFn7z6qFuE",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089474468,
+              "updated": 1789089497706
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b429b001gomGBtsrT8TLXt",
+        "type": "plugin.added",
+        "properties": {
+          "id": "groq"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b429c001LNixeC8C2ucItt",
+        "type": "plugin.added",
+        "properties": {
+          "id": "kilo"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b429d001e7MtXTlmL1zpdQ",
+        "type": "plugin.added",
+        "properties": {
+          "id": "llmgateway"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b429d002uZTq7KmBg2NYv4",
+        "type": "plugin.added",
+        "properties": {
+          "id": "mistral"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b429e001IDhSDROwjczTJR",
+        "type": "plugin.added",
+        "properties": {
+          "id": "nvidia"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b42a9001ylwGCsgK33eDxU",
+        "type": "plugin.added",
+        "properties": {
+          "id": "opencode"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b42aa001keIFWxhmj7yHIn",
+        "type": "plugin.added",
+        "properties": {
+          "id": "snowflake-cortex"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b42ab001SZ5KJXUrueVOXA",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai-compatible"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b42ac001UKDYjTXIi3h2X2",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b42ad001xfAlC49ntgY8Jo",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openrouter"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b42ae001gDmn6veH9DV8Wb",
+        "type": "plugin.added",
+        "properties": {
+          "id": "perplexity"
+        }
+      }
+    },
+    {
+      "t": 20649.4,
+      "event": {
+        "id": "evt_08e0b42b10010KYfQ6q2apWnou",
+        "type": "plugin.added",
+        "properties": {
+          "id": "sap-ai-core"
+        }
+      }
+    },
+    {
+      "t": 20649.5,
+      "event": {
+        "id": "evt_08e0b42b5001LzCRwPv37mUGnw",
+        "type": "session.status",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "status": {
+            "type": "busy"
+          }
+        }
+      }
+    },
+    {
+      "t": 20649.5,
+      "event": {
+        "id": "evt_08e0b42ba001lmYJm5yUrK47fO",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "parentID": "msg_08e0b422b001BbTQEPDh2O7xea",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "/private/sandbox/project",
+              "root": "/private/sandbox/project"
+            },
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "modelID": "big-pickle",
+            "providerID": "opencode",
+            "time": {
+              "created": 1789089497785
+            },
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908"
+          }
+        }
+      }
+    },
+    {
+      "t": 20716.2,
+      "event": {
+        "id": "evt_08e0b44f300173qJ0QZHRspJQW",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 20716.2,
+      "event": {
+        "id": "evt_08e0b44f4001ZafimCOlTOyi65",
+        "type": "plugin.added",
+        "properties": {
+          "id": "togetherai"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44f4002TrwsQZIbvwo8dF",
+        "type": "plugin.added",
+        "properties": {
+          "id": "vercel"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44f5001U2MA04QzfwDeNN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "venice"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44f50025mmQuJNZJ7MPfP",
+        "type": "plugin.added",
+        "properties": {
+          "id": "xai"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44f50032ivEIzIh24zWhK",
+        "type": "plugin.added",
+        "properties": {
+          "id": "zenmux"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44f50044pqwE4R3tZ15R0",
+        "type": "plugin.added",
+        "properties": {
+          "id": "dynamic-provider"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44fb00143M4H3YFYl18Z8",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-plugin"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44fd001XUsq9SJFJlmZRP",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-provider"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b44ff001ek8XdoK9rCFu0U",
+        "type": "plugin.added",
+        "properties": {
+          "id": "variant"
+        }
+      }
+    },
+    {
+      "t": 20716.3,
+      "event": {
+        "id": "evt_08e0b450200105jYYnXnxc8Dmf",
+        "type": "reference.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 21031.5,
+      "event": {
+        "id": "evt_08e0b457c001WGvQL91QGo0aqP",
+        "type": "integration.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 21031.6,
+      "event": {
+        "id": "evt_08e0b46860014BTgRT9uY6Iy5I",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 24241.5,
+      "event": {
+        "id": "evt_08e0b52b2001RtGBQamAzDG1oK",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "summary": {
+              "additions": 0,
+              "deletions": 0,
+              "files": 0
+            },
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089474468,
+              "updated": 1789089501871
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 24241.5,
+      "event": {
+        "id": "evt_08e0b52cf001tdO5qZdrshQ9F4",
+        "type": "session.diff",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "diff": []
+        }
+      }
+    },
+    {
+      "t": 24241.5,
+      "event": {
+        "id": "evt_08e0b52d300196Z44h7jRnNozO",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1789089497643
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "big-pickle"
+            },
+            "id": "msg_08e0b422b001BbTQEPDh2O7xea",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "summary": {
+              "diffs": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 24604,
+      "event": {
+        "id": "evt_08e0b5465001O3aYbrMXA7nKsD",
+        "type": "plugin.added",
+        "properties": {
+          "id": "core/config-reference"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b5467001knQnPRtG3A3QB3",
+        "type": "plugin.added",
+        "properties": {
+          "id": "agent"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b5467002Mg5vFJL6Uo1vQS",
+        "type": "plugin.added",
+        "properties": {
+          "id": "command"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b5468001RFzyCYKzjc1z9N",
+        "type": "plugin.added",
+        "properties": {
+          "id": "skill"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b5469001UIOiQmmRDuslO2",
+        "type": "plugin.added",
+        "properties": {
+          "id": "models-dev"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b5469002mR9eGBuuZt0NtU",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-agent"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b5469003amScy6Y7I9npVX",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-command"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b546a001mlLI4wcDzjw4V4",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-skill"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b546a002v1y4HMGvQTaUkN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "alibaba"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b546a003o2kkj27UOrcY2H",
+        "type": "plugin.added",
+        "properties": {
+          "id": "amazon-bedrock"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b546a004g25YsO5CBdxkeP",
+        "type": "plugin.added",
+        "properties": {
+          "id": "anthropic"
+        }
+      }
+    },
+    {
+      "t": 24604.1,
+      "event": {
+        "id": "evt_08e0b546a005KQ911ZoR657ywf",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure-cognitive-services"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b5474001HZrPasHopGBxBW",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b54760012x68l5gzm4Z50Y",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cerebras"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b5476002a34CtGvIcpMRBb",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-ai-gateway"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b5478001q44Vb1o357GKiJ",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-workers-ai"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b54790011QnHsR8GVq10I0",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cohere"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b5479002L4RCwGnVqgDFYL",
+        "type": "plugin.added",
+        "properties": {
+          "id": "deepinfra"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b547a001GObkJQvCRepGpg",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gateway"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b547b001drsl8gUqYr0dE1",
+        "type": "plugin.added",
+        "properties": {
+          "id": "github-copilot"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b547b002WWyXpRkcwq0hXH",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gitlab"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b547b0031YHQTDMvamQ7Hm",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b547b0041ke2OoN6jEpASE",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex-anthropic"
+        }
+      }
+    },
+    {
+      "t": 24644.6,
+      "event": {
+        "id": "evt_08e0b547c0017Zlb8uQ58rTYkz",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex"
+        }
+      }
+    },
+    {
+      "t": 25236.8,
+      "event": {
+        "id": "evt_08e0b5482001sc8NHxzEYcvEgq",
+        "type": "plugin.added",
+        "properties": {
+          "id": "groq"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a1001n0V496MIf9U8AK",
+        "type": "plugin.added",
+        "properties": {
+          "id": "kilo"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a20019wqr4Yum0lTZrY",
+        "type": "plugin.added",
+        "properties": {
+          "id": "llmgateway"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a20020jgb0Bv5lgJVUA",
+        "type": "plugin.added",
+        "properties": {
+          "id": "mistral"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a2003mEf237iOx81h7G",
+        "type": "plugin.added",
+        "properties": {
+          "id": "nvidia"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a4001JUmlTnUbN7jDej",
+        "type": "plugin.added",
+        "properties": {
+          "id": "opencode"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a50012sYBew4WJhAlpN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "snowflake-cortex"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a50028y2xdPByJyV5dF",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai-compatible"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a500304P9WiF42RnF40",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a6001A1MARbIqkQolq8",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openrouter"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a6002Jh4oGM4JnQMTRe",
+        "type": "plugin.added",
+        "properties": {
+          "id": "perplexity"
+        }
+      }
+    },
+    {
+      "t": 25236.9,
+      "event": {
+        "id": "evt_08e0b54a6003VueUGBYjtR5yhN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "sap-ai-core"
+        }
+      }
+    },
+    {
+      "t": 25250.3,
+      "event": {
+        "id": "evt_08e0b56e3001QapJ2rTm7JoEYU",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56e4001BQDiWlA6kdrDMH",
+        "type": "plugin.added",
+        "properties": {
+          "id": "togetherai"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56e6001iqFU4rAodKA5Hc",
+        "type": "plugin.added",
+        "properties": {
+          "id": "vercel"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56e6002d8NWSfQHiVdErj",
+        "type": "plugin.added",
+        "properties": {
+          "id": "venice"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56e6003MwcFzJ5ybJr8XE",
+        "type": "plugin.added",
+        "properties": {
+          "id": "xai"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56e7001ViwboOiLZvIqqK",
+        "type": "plugin.added",
+        "properties": {
+          "id": "zenmux"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56e7002HJP4ewfEL596xw",
+        "type": "plugin.added",
+        "properties": {
+          "id": "dynamic-provider"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56f3001Lj2vCuxcZLahoR",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-plugin"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56f4001HVYSXM31sgkQei",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-provider"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56f4002YEIWuTbQPggBid",
+        "type": "plugin.added",
+        "properties": {
+          "id": "variant"
+        }
+      }
+    },
+    {
+      "t": 25250.4,
+      "event": {
+        "id": "evt_08e0b56f5001a1Q3Zpmt4NHHNc",
+        "type": "reference.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 25486.5,
+      "event": {
+        "id": "evt_08e0b57290015Nz2l6SUkNwv45",
+        "type": "integration.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 25486.6,
+      "event": {
+        "id": "evt_08e0b57ea001mxut2sn2V93l3O",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 28081.4,
+      "event": {
+        "id": "evt_08e0b61d2001xv4WuODKuvraeT",
+        "type": "session.status",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "status": {
+            "type": "busy"
+          }
+        }
+      }
+    },
+    {
+      "t": 28843,
+      "event": {
+        "id": "evt_08e0b64da001wFjLmZgcTPuJJK",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "part": {
+            "id": "prt_08e0b64d9001Mj8MpVfbsjBknC",
+            "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "snapshot": "68d285291def23366dc0e95b30e290202fd71ced",
+            "type": "step-start"
+          },
+          "time": 1789089506522
+        }
+      }
+    },
+    {
+      "t": 28843,
+      "event": {
+        "id": "evt_08e0b64e7001yDs9dt41k7XbY8",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "part": {
+            "id": "prt_08e0b64e6001w1geQj1hQxa3IG",
+            "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "type": "reasoning",
+            "text": "",
+            "time": {
+              "start": 1789089506534
+            }
+          },
+          "time": 1789089506535
+        }
+      }
+    },
+    {
+      "t": 28843.1,
+      "event": {
+        "id": "evt_08e0b64ee001ZsIXur82tGBUyK",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "partID": "prt_08e0b64e6001w1geQj1hQxa3IG",
+          "field": "text",
+          "delta": "The"
+        }
+      }
+    },
+    {
+      "t": 28843.1,
+      "event": {
+        "id": "evt_08e0b64f5001Emoi8ZFcsdyAM9",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "partID": "prt_08e0b64e6001w1geQj1hQxa3IG",
+          "field": "text",
+          "delta": " user wants me to reply"
+        }
+      }
+    },
+    {
+      "t": 28843.1,
+      "event": {
+        "id": "evt_08e0b64f6001zpKTbgY2q2TlCI",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "partID": "prt_08e0b64e6001w1geQj1hQxa3IG",
+          "field": "text",
+          "delta": " with exactly one word:"
+        }
+      }
+    },
+    {
+      "t": 28843.1,
+      "event": {
+        "id": "evt_08e0b64f7001nxUvH4a3SRqhjI",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "partID": "prt_08e0b64e6001w1geQj1hQxa3IG",
+          "field": "text",
+          "delta": " pong"
+        }
+      }
+    },
+    {
+      "t": 28843.1,
+      "event": {
+        "id": "evt_08e0b64f9001bgxVRedmhU5bpj",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "part": {
+            "id": "prt_08e0b64e6001w1geQj1hQxa3IG",
+            "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "type": "reasoning",
+            "text": "The user wants me to reply with exactly one word: pong",
+            "time": {
+              "start": 1789089506534,
+              "end": 1789089506553
+            }
+          },
+          "time": 1789089506553
+        }
+      }
+    },
+    {
+      "t": 28843.1,
+      "event": {
+        "id": "evt_08e0b64fe001x0ykuviPFUHsrO",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "part": {
+            "id": "prt_08e0b64fe001iir5fh4nbVwyJ6",
+            "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "type": "text",
+            "text": "",
+            "time": {
+              "start": 1789089506558
+            }
+          },
+          "time": 1789089506558
+        }
+      }
+    },
+    {
+      "t": 28843.1,
+      "event": {
+        "id": "evt_08e0b6501001rZqOmuKHDFWOIN",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "partID": "prt_08e0b64fe001iir5fh4nbVwyJ6",
+          "field": "text",
+          "delta": "pong"
+        }
+      }
+    },
+    {
+      "t": 28843.2,
+      "event": {
+        "id": "evt_08e0b6504001ugitdagFKiWo8Q",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "part": {
+            "id": "prt_08e0b64fe001iir5fh4nbVwyJ6",
+            "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "type": "text",
+            "text": "pong",
+            "time": {
+              "start": 1789089506558,
+              "end": 1789089506563
+            }
+          },
+          "time": 1789089506564
+        }
+      }
+    },
+    {
+      "t": 29207.4,
+      "event": {
+        "id": "evt_08e0b665e001p06FvnqztTFlKI",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "part": {
+            "id": "prt_08e0b665d001S2Rs34Eu1GCZUo",
+            "reason": "stop",
+            "snapshot": "68d285291def23366dc0e95b30e290202fd71ced",
+            "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "type": "step-finish",
+            "tokens": {
+              "total": 8389,
+              "input": 6580,
+              "output": 17,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 1792
+              }
+            },
+            "cost": 0
+          },
+          "time": 1789089506910
+        }
+      }
+    },
+    {
+      "t": 29207.5,
+      "event": {
+        "id": "evt_08e0b6665001Og7PNDxjPZSP1D",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "parentID": "msg_08e0b422b001BbTQEPDh2O7xea",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "/private/sandbox/project",
+              "root": "/private/sandbox/project"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 8389,
+              "input": 6580,
+              "output": 17,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 1792
+              }
+            },
+            "modelID": "big-pickle",
+            "providerID": "opencode",
+            "time": {
+              "created": 1789089497785
+            },
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "finish": "stop"
+          }
+        }
+      }
+    },
+    {
+      "t": 29705,
+      "event": {
+        "id": "evt_08e0b683d001JOYIkrC08d6o76",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "msg_08e0b42b9001D1oUcGJSwR69CI",
+            "parentID": "msg_08e0b422b001BbTQEPDh2O7xea",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "/private/sandbox/project",
+              "root": "/private/sandbox/project"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 8389,
+              "input": 6580,
+              "output": 17,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 1792
+              }
+            },
+            "modelID": "big-pickle",
+            "providerID": "opencode",
+            "time": {
+              "created": 1789089497785,
+              "completed": 1789089507388
+            },
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "finish": "stop"
+          }
+        }
+      }
+    },
+    {
+      "t": 29705,
+      "event": {
+        "id": "evt_08e0b684a001P4CU6MWvZCv48X",
+        "type": "session.status",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "status": {
+            "type": "busy"
+          }
+        }
+      }
+    },
+    {
+      "t": 29705,
+      "event": {
+        "id": "evt_08e0b6854001WpHqnHsYhZ49td",
+        "type": "session.status",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "status": {
+            "type": "idle"
+          }
+        }
+      }
+    },
+    {
+      "t": 29705,
+      "event": {
+        "id": "evt_08e0b6854002D2RoUJ4QRxFXuz",
+        "type": "session.idle",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908"
+        }
+      }
+    },
+    {
+      "t": 29705,
+      "event": {
+        "id": "evt_08e0b6861001UXzCra6vNWEU52",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "summary": {
+              "additions": 0,
+              "deletions": 0,
+              "files": 0
+            },
+            "cost": 0,
+            "tokens": {
+              "input": 6580,
+              "output": 17,
+              "reasoning": 0,
+              "cache": {
+                "read": 1792,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089474468,
+              "updated": 1789089507420
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 29705,
+      "event": {
+        "id": "evt_08e0b6866001X7At5osCTSqTV3",
+        "type": "session.diff",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "diff": []
+        }
+      }
+    },
+    {
+      "t": 29864.2,
+      "event": {
+        "id": "evt_08e0b68fd001L59KeQ7vcj0VgP",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1789089497643
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "big-pickle"
+            },
+            "summary": {
+              "diffs": []
+            },
+            "id": "msg_08e0b422b001BbTQEPDh2O7xea",
+            "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908"
+          }
+        }
+      }
+    },
+    {
+      "t": 30066.9,
+      "event": {
+        "id": "evt_08e0b69d4001x9RCl7jy8VGUAc",
+        "type": "server.heartbeat",
+        "properties": {}
+      }
+    }
+  ],
+  "durable": [
+    {
+      "t": 19948.4,
+      "rowid": 1,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 0,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089474468,
+            "updated": 1789089497643
+          }
+        }
+      }
+    },
+    {
+      "t": 19969.5,
+      "rowid": 2,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 1,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "msg_08e0b422b001BbTQEPDh2O7xea",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "role": "user",
+          "time": {
+            "created": 1789089497643
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "opencode",
+            "modelID": "big-pickle"
+          }
+        }
+      }
+    },
+    {
+      "t": 19992.3,
+      "rowid": 3,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 2,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "part": {
+          "id": "prt_08e0b4245001oBw4nlmhBeyXqn",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b422b001BbTQEPDh2O7xea",
+          "type": "text",
+          "text": "Reply with exactly one word: pong"
+        },
+        "time": 1789089497687
+      }
+    },
+    {
+      "t": 19992.4,
+      "rowid": 4,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 3,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089474468,
+            "updated": 1789089497706
+          }
+        }
+      }
+    },
+    {
+      "t": 20075.4,
+      "rowid": 5,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 4,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "role": "assistant",
+          "time": {
+            "created": 1789089497785
+          },
+          "parentID": "msg_08e0b422b001BbTQEPDh2O7xea",
+          "modelID": "big-pickle",
+          "providerID": "opencode",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "/private/sandbox/project",
+            "root": "/private/sandbox/project"
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 24172.1,
+      "rowid": 6,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 5,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089474468,
+            "updated": 1789089501871
+          }
+        }
+      }
+    },
+    {
+      "t": 24223.9,
+      "rowid": 7,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 6,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "msg_08e0b422b001BbTQEPDh2O7xea",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "role": "user",
+          "time": {
+            "created": 1789089497643
+          },
+          "summary": {
+            "diffs": []
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "opencode",
+            "modelID": "big-pickle"
+          }
+        }
+      }
+    },
+    {
+      "t": 28808.8,
+      "rowid": 8,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 7,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "part": {
+          "id": "prt_08e0b64d9001Mj8MpVfbsjBknC",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "type": "step-start",
+          "snapshot": "68d285291def23366dc0e95b30e290202fd71ced"
+        },
+        "time": 1789089506522
+      }
+    },
+    {
+      "t": 28829.1,
+      "rowid": 9,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 8,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "part": {
+          "id": "prt_08e0b64e6001w1geQj1hQxa3IG",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1789089506534
+          }
+        },
+        "time": 1789089506535
+      }
+    },
+    {
+      "t": 28829.2,
+      "rowid": 10,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 9,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "part": {
+          "id": "prt_08e0b64e6001w1geQj1hQxa3IG",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "type": "reasoning",
+          "text": "The user wants me to reply with exactly one word: pong",
+          "time": {
+            "start": 1789089506534,
+            "end": 1789089506553
+          }
+        },
+        "time": 1789089506553
+      }
+    },
+    {
+      "t": 28850.5,
+      "rowid": 11,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 10,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "part": {
+          "id": "prt_08e0b64fe001iir5fh4nbVwyJ6",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "type": "text",
+          "text": "",
+          "time": {
+            "start": 1789089506558
+          }
+        },
+        "time": 1789089506558
+      }
+    },
+    {
+      "t": 28850.5,
+      "rowid": 12,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 11,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "part": {
+          "id": "prt_08e0b64fe001iir5fh4nbVwyJ6",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "type": "text",
+          "text": "pong",
+          "time": {
+            "start": 1789089506558,
+            "end": 1789089506563
+          }
+        },
+        "time": 1789089506564
+      }
+    },
+    {
+      "t": 29201.3,
+      "rowid": 13,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 12,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "part": {
+          "id": "prt_08e0b665d001S2Rs34Eu1GCZUo",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "messageID": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "type": "step-finish",
+          "reason": "stop",
+          "snapshot": "68d285291def23366dc0e95b30e290202fd71ced",
+          "cost": 0,
+          "tokens": {
+            "total": 8389,
+            "input": 6580,
+            "output": 17,
+            "reasoning": 0,
+            "cache": {
+              "read": 1792,
+              "write": 0
+            }
+          }
+        },
+        "time": 1789089506910
+      }
+    },
+    {
+      "t": 29201.4,
+      "rowid": 14,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 13,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "role": "assistant",
+          "time": {
+            "created": 1789089497785
+          },
+          "parentID": "msg_08e0b422b001BbTQEPDh2O7xea",
+          "modelID": "big-pickle",
+          "providerID": "opencode",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "/private/sandbox/project",
+            "root": "/private/sandbox/project"
+          },
+          "cost": 0,
+          "tokens": {
+            "total": 8389,
+            "input": 6580,
+            "output": 17,
+            "reasoning": 0,
+            "cache": {
+              "read": 1792,
+              "write": 0
+            }
+          },
+          "finish": "stop"
+        }
+      }
+    },
+    {
+      "t": 29681.6,
+      "rowid": 15,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 14,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "msg_08e0b42b9001D1oUcGJSwR69CI",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "role": "assistant",
+          "time": {
+            "created": 1789089497785,
+            "completed": 1789089507388
+          },
+          "parentID": "msg_08e0b422b001BbTQEPDh2O7xea",
+          "modelID": "big-pickle",
+          "providerID": "opencode",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "/private/sandbox/project",
+            "root": "/private/sandbox/project"
+          },
+          "cost": 0,
+          "tokens": {
+            "total": 8389,
+            "input": 6580,
+            "output": 17,
+            "reasoning": 0,
+            "cache": {
+              "read": 1792,
+              "write": 0
+            }
+          },
+          "finish": "stop"
+        }
+      }
+    },
+    {
+      "t": 29703.7,
+      "rowid": 16,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 15,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 6580,
+            "output": 17,
+            "reasoning": 0,
+            "cache": {
+              "read": 1792,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089474468,
+            "updated": 1789089507420
+          }
+        }
+      }
+    },
+    {
+      "t": 29860.4,
+      "rowid": 17,
+      "aggregateID": "ses_4a78e376f6d341bd83ea72d98c647908",
+      "seq": 16,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+        "info": {
+          "id": "msg_08e0b422b001BbTQEPDh2O7xea",
+          "sessionID": "ses_4a78e376f6d341bd83ea72d98c647908",
+          "role": "user",
+          "time": {
+            "created": 1789089497643
+          },
+          "summary": {
+            "diffs": []
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "opencode",
+            "modelID": "big-pickle"
+          }
+        }
+      }
+    }
+  ],
+  "http": [
+    {
+      "t": 15680.6,
+      "method": "GET",
+      "path": "/session/status",
+      "auth": false,
+      "status": 401,
+      "body": null
+    },
+    {
+      "t": 15758.7,
+      "method": "GET",
+      "path": "/session/status",
+      "auth": true,
+      "status": 200,
+      "body": {}
+    },
+    {
+      "t": 15783,
+      "method": "GET",
+      "path": "/permission",
+      "auth": true,
+      "status": 200,
+      "body": []
+    },
+    {
+      "t": 15841.6,
+      "method": "GET",
+      "path": "/question",
+      "auth": true,
+      "status": 200,
+      "body": []
+    }
+  ],
+  "prompts": [
+    {
+      "t": 18850.1,
+      "text": "Reply with exactly one word: pong"
+    }
+  ],
+  "pty": {
+    "firstOutputAt": 6239.5,
+    "bytes": 45059,
+    "exit": {
+      "exitCode": 0,
+      "signal": 0,
+      "t": 32292.7
+    },
+    "tail": "■■⬝⬝■■■■■■⬝■■■■■■⬝■■■■■■⬝⬝■■■■■⬝⬝⬝■■■■⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝⬝■⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝■⬝⬝⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝■■■■⬝⬝⬝⬝■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■⬝⬝⬝⬝■■■■⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝⬝⬝■⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝■■■■⬝⬝⬝■■■■■⬝⬝■■■■■■⬝■■■■■■⬝■■■■■■⬝⬝■■■■■⬝⬝⬝■■■■⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝⬝■⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝+ Thought: 19ms ▣ Build · Big Picklepong⬝⬝⬝⬝⬝⬝⬝⬝■⬝⬝⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝■■■■⬝⬝⬝⬝■■■■■⬝⬝⬝ 8.4K (4%)■■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■⬝⬝⬝⬝■■■■⬝⬝⬝⬝⬝■■■ · 9.7s┃ Build·Big PickleOpenCode Zen╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ /tmp/opencode-terminal-headless-probe/ 8.4K (4% ctrl+p 1789089473032-86911e/roject commands \u001b[>4;0m ▄ █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█ █ █ █ █ █▀▀▀ █ █ █ █ █ █ █ █▀▀▀ ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ Session probe Continue opencode -s ses_4a78e376f6d341bd83ea72d98c647908 "
+  }
+}

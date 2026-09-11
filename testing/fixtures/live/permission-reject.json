@@ -1,0 +1,2355 @@
+{
+  "scenario": "permission-reject",
+  "opencodeVersion": "1.18.30",
+  "model": "opencode/big-pickle",
+  "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+  "notes": [
+    "[4.4ms] spawn opencode --session ses_9571d1d4439c4c02b29bd3d7f45442d6 --hostname 127.0.0.1 --port 56207",
+    "[8545.9ms] server healthy (200)",
+    "[8598.5ms] sse connected (200)",
+    "[14672.9ms] pasted prompt (112 chars)",
+    "[22052.9ms] permission request id=per_08e0d67df001KcekQeG7lVZ567",
+    "[25402.3ms] tui exited code=0 signal=0"
+  ],
+  "sse": [
+    {
+      "t": 8598.7,
+      "event": {
+        "id": "evt_08e0d3478001pApkofiW39FFVH",
+        "type": "server.connected",
+        "properties": {}
+      }
+    },
+    {
+      "t": 10469.5,
+      "event": {
+        "id": "evt_08e0d3997001UtMm3meuQwwLjL",
+        "type": "plugin.added",
+        "properties": {
+          "id": "core/config-reference"
+        }
+      }
+    },
+    {
+      "t": 10469.6,
+      "event": {
+        "id": "evt_08e0d399d001OVUnEgmXTSXBOx",
+        "type": "plugin.added",
+        "properties": {
+          "id": "agent"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d399e0011thskuzz5ROo3X",
+        "type": "plugin.added",
+        "properties": {
+          "id": "command"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39a0001QCOpe42juHv82d",
+        "type": "plugin.added",
+        "properties": {
+          "id": "skill"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39a7001ww2fVCgN7ckGNk",
+        "type": "plugin.added",
+        "properties": {
+          "id": "models-dev"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39a9001KY2M56UbUJgQ6y",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-agent"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39ab001ZwOldUNnMS6P0D",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-command"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39ac0016W8x2D3JPeQJUf",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-skill"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39ad001crwJDuBSva2tM7",
+        "type": "plugin.added",
+        "properties": {
+          "id": "alibaba"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39b0001yzZR53S8ePnim9",
+        "type": "plugin.added",
+        "properties": {
+          "id": "amazon-bedrock"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39b40012u5b1eTQ7aHw8C",
+        "type": "plugin.added",
+        "properties": {
+          "id": "anthropic"
+        }
+      }
+    },
+    {
+      "t": 10469.7,
+      "event": {
+        "id": "evt_08e0d39b4002Ui0uPo1uz1hvzV",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure-cognitive-services"
+        }
+      }
+    },
+    {
+      "t": 10634.6,
+      "event": {
+        "id": "evt_08e0d3b16001iUhnJs5m3d6Bz7",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure"
+        }
+      }
+    },
+    {
+      "t": 10634.6,
+      "event": {
+        "id": "evt_08e0d3b170019ZDtz4okvQhqYg",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cerebras"
+        }
+      }
+    },
+    {
+      "t": 10634.6,
+      "event": {
+        "id": "evt_08e0d3b1a0014izmR6YnXeFlIX",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-ai-gateway"
+        }
+      }
+    },
+    {
+      "t": 10634.6,
+      "event": {
+        "id": "evt_08e0d3b2b001oBcxZoxPhdsNWi",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-workers-ai"
+        }
+      }
+    },
+    {
+      "t": 10634.6,
+      "event": {
+        "id": "evt_08e0d3b31001AY3XZO46GbztPB",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cohere"
+        }
+      }
+    },
+    {
+      "t": 10634.8,
+      "event": {
+        "id": "evt_08e0d3b360017Z05ZAXXiWVfj3",
+        "type": "plugin.added",
+        "properties": {
+          "id": "deepinfra"
+        }
+      }
+    },
+    {
+      "t": 10636.7,
+      "event": {
+        "id": "evt_08e0d3b3d001W3TeiSQ4f5KeFf",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gateway"
+        }
+      }
+    },
+    {
+      "t": 10636.7,
+      "event": {
+        "id": "evt_08e0d3b40001kqWkTSxilhDz4O",
+        "type": "plugin.added",
+        "properties": {
+          "id": "github-copilot"
+        }
+      }
+    },
+    {
+      "t": 10636.8,
+      "event": {
+        "id": "evt_08e0d3b41001ZH3M2kPRoPV01u",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gitlab"
+        }
+      }
+    },
+    {
+      "t": 10636.8,
+      "event": {
+        "id": "evt_08e0d3b420013xTU5dRVovaiIH",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google"
+        }
+      }
+    },
+    {
+      "t": 10636.8,
+      "event": {
+        "id": "evt_08e0d3b7c001cdwItzm6zu0nFA",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex-anthropic"
+        }
+      }
+    },
+    {
+      "t": 10636.8,
+      "event": {
+        "id": "evt_08e0d3b87001mkqAKYWDsrlWXN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3bc20012uHxHMHsATwfHH",
+        "type": "plugin.added",
+        "properties": {
+          "id": "groq"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3bc8001rQHyGE44Mq5RF4",
+        "type": "plugin.added",
+        "properties": {
+          "id": "kilo"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3bc9001DSNHV5JcSl2orS",
+        "type": "plugin.added",
+        "properties": {
+          "id": "llmgateway"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3bca0015UNeSQJZBy4art",
+        "type": "plugin.added",
+        "properties": {
+          "id": "mistral"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c5f001W672WYKQwRj3w1",
+        "type": "plugin.added",
+        "properties": {
+          "id": "nvidia"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c68001xZ066MNUJAGClP",
+        "type": "plugin.added",
+        "properties": {
+          "id": "opencode"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c68002K3ViE0OsjZanQ7",
+        "type": "plugin.added",
+        "properties": {
+          "id": "snowflake-cortex"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c69001ElUhz756K6biNR",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai-compatible"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c69002UcwUXUGMN1ou6F",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c6a001JXSIGyeCYt1NIi",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openrouter"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c6a002xdjA4oY0LH4uWN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "perplexity"
+        }
+      }
+    },
+    {
+      "t": 11357,
+      "event": {
+        "id": "evt_08e0d3c6b001TC1slRFTnXt8DX",
+        "type": "plugin.added",
+        "properties": {
+          "id": "sap-ai-core"
+        }
+      }
+    },
+    {
+      "t": 11382.7,
+      "event": {
+        "id": "evt_08e0d3f29001NhmUdDv5GtBSrT",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 11382.7,
+      "event": {
+        "id": "evt_08e0d3f29002sUM2oUZZYPneIe",
+        "type": "plugin.added",
+        "properties": {
+          "id": "togetherai"
+        }
+      }
+    },
+    {
+      "t": 11382.7,
+      "event": {
+        "id": "evt_08e0d3f2a001XMqk8p8rfFO6oa",
+        "type": "plugin.added",
+        "properties": {
+          "id": "vercel"
+        }
+      }
+    },
+    {
+      "t": 11382.7,
+      "event": {
+        "id": "evt_08e0d3f2b001uiYl4hU2D2I5MA",
+        "type": "plugin.added",
+        "properties": {
+          "id": "venice"
+        }
+      }
+    },
+    {
+      "t": 11382.7,
+      "event": {
+        "id": "evt_08e0d3f2b002mSQJKbptrX6cMg",
+        "type": "plugin.added",
+        "properties": {
+          "id": "xai"
+        }
+      }
+    },
+    {
+      "t": 11382.7,
+      "event": {
+        "id": "evt_08e0d3f2b003nVX5KyeZVVBi3I",
+        "type": "plugin.added",
+        "properties": {
+          "id": "zenmux"
+        }
+      }
+    },
+    {
+      "t": 11382.7,
+      "event": {
+        "id": "evt_08e0d3f2c0011ukw3iVXWR8t3F",
+        "type": "plugin.added",
+        "properties": {
+          "id": "dynamic-provider"
+        }
+      }
+    },
+    {
+      "t": 11382.8,
+      "event": {
+        "id": "evt_08e0d3f35001mEfA4Htq0e8f5n",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-plugin"
+        }
+      }
+    },
+    {
+      "t": 11382.8,
+      "event": {
+        "id": "evt_08e0d3f36001Mf82GDlyeZ3Dni",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-provider"
+        }
+      }
+    },
+    {
+      "t": 11382.8,
+      "event": {
+        "id": "evt_08e0d3f37001isaI7TieANc9bF",
+        "type": "plugin.added",
+        "properties": {
+          "id": "variant"
+        }
+      }
+    },
+    {
+      "t": 11382.8,
+      "event": {
+        "id": "evt_08e0d3f380012Il2EJZPxwV5Cb",
+        "type": "reference.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 11653.6,
+      "event": {
+        "id": "evt_08e0d3f70001PL2t07bHBZEZy6",
+        "type": "integration.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 11653.6,
+      "event": {
+        "id": "evt_08e0d4068001DEHnTlYV5AO1KR",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 15405.3,
+      "event": {
+        "id": "evt_08e0d4eac001riFpQ721SHzvGw",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089614225,
+              "updated": 1789089631911
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 15405.3,
+      "event": {
+        "id": "evt_08e0d4ebf001qp62wfKH0dHVis",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+            "role": "user",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "time": {
+              "created": 1789089631911
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "big-pickle"
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 15405.4,
+      "event": {
+        "id": "evt_08e0d4ec5001W7vh1vxNnBHCQI",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "type": "text",
+            "text": "Use the bash tool to run the command `ls -1` in the current directory, then tell me how many entries it printed.",
+            "messageID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "id": "prt_08e0d4ebe0019qkhFUIFpq3z71"
+          },
+          "time": 1789089631941
+        }
+      }
+    },
+    {
+      "t": 15405.4,
+      "event": {
+        "id": "evt_08e0d4ecb0012RVokyUzHKK9jG",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089614225,
+              "updated": 1789089631945
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 15421.4,
+      "event": {
+        "id": "evt_08e0d4efe001epYyg3FHgUv7kU",
+        "type": "session.status",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "status": {
+            "type": "busy"
+          }
+        }
+      }
+    },
+    {
+      "t": 15421.5,
+      "event": {
+        "id": "evt_08e0d4f05001Gni4UN5LEoEXWA",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "parentID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "/private/sandbox/project",
+              "root": "/private/sandbox/project"
+            },
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "modelID": "big-pickle",
+            "providerID": "opencode",
+            "time": {
+              "created": 1789089632005
+            },
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6"
+          }
+        }
+      }
+    },
+    {
+      "t": 16361.3,
+      "event": {
+        "id": "evt_08e0d52b4001LmP2eGqXfVwHcs",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "summary": {
+              "additions": 0,
+              "deletions": 0,
+              "files": 0
+            },
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089614225,
+              "updated": 1789089632946
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 16361.3,
+      "event": {
+        "id": "evt_08e0d52bb001qZ4XelkBoTmf4l",
+        "type": "session.diff",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "diff": []
+        }
+      }
+    },
+    {
+      "t": 16361.3,
+      "event": {
+        "id": "evt_08e0d52be001uIHrjZfNBcux4T",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1789089631911
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "big-pickle"
+            },
+            "id": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "summary": {
+              "diffs": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5523001X5f7kGRPizccFu",
+        "type": "plugin.added",
+        "properties": {
+          "id": "core/config-reference"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5524001BFN0Q5RGLq0JN2",
+        "type": "plugin.added",
+        "properties": {
+          "id": "agent"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5524002PBhgfbMA2zjdyp",
+        "type": "plugin.added",
+        "properties": {
+          "id": "command"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5524003esmxbWbGIVUSel",
+        "type": "plugin.added",
+        "properties": {
+          "id": "skill"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d55250017M37p6YBIyIhRi",
+        "type": "plugin.added",
+        "properties": {
+          "id": "models-dev"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5525002nOv5zS2OSheqMR",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-agent"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5525003rs1OfJPyZHKdri",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-command"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5525004n5y9s9lNOBLM5H",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-skill"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d5526001ZnXnGKmyLMLd1S",
+        "type": "plugin.added",
+        "properties": {
+          "id": "alibaba"
+        }
+      }
+    },
+    {
+      "t": 16974.8,
+      "event": {
+        "id": "evt_08e0d55270015G7OxEzo60e4pW",
+        "type": "plugin.added",
+        "properties": {
+          "id": "amazon-bedrock"
+        }
+      }
+    },
+    {
+      "t": 16974.9,
+      "event": {
+        "id": "evt_08e0d55280018fmYQBNhuV8UJ0",
+        "type": "plugin.added",
+        "properties": {
+          "id": "anthropic"
+        }
+      }
+    },
+    {
+      "t": 16974.9,
+      "event": {
+        "id": "evt_08e0d5528002VDcfiNeuCStiTN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure-cognitive-services"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552c001LFuboRavp222nS",
+        "type": "plugin.added",
+        "properties": {
+          "id": "azure"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552c002TxPntoVfWoMHVg",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cerebras"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552d001zrEiQWaZ7vIwer",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-ai-gateway"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552d002IbvycalxS1jyes",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cloudflare-workers-ai"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552d003i5FRCOovJ770Wc",
+        "type": "plugin.added",
+        "properties": {
+          "id": "cohere"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552d004sBETNONGIAf0YM",
+        "type": "plugin.added",
+        "properties": {
+          "id": "deepinfra"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552e001RN9RPtzVC5vBAG",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gateway"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552e002nqs7o75k1sp7fh",
+        "type": "plugin.added",
+        "properties": {
+          "id": "github-copilot"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552e003fMvtF1O0mzTRdl",
+        "type": "plugin.added",
+        "properties": {
+          "id": "gitlab"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552e004qXXUE0TA7TqYbX",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552f0018v3qoLr71Lj2CN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex-anthropic"
+        }
+      }
+    },
+    {
+      "t": 16994.8,
+      "event": {
+        "id": "evt_08e0d552f002Ajhot561GAh12o",
+        "type": "plugin.added",
+        "properties": {
+          "id": "google-vertex"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5542001UNlM9rel4YOqY9",
+        "type": "plugin.added",
+        "properties": {
+          "id": "groq"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d554200286XPR0VSGPBq6M",
+        "type": "plugin.added",
+        "properties": {
+          "id": "kilo"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5543001UDK0hzZT5h4anE",
+        "type": "plugin.added",
+        "properties": {
+          "id": "llmgateway"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5543002IijVU6s20XdNOK",
+        "type": "plugin.added",
+        "properties": {
+          "id": "mistral"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5543003eXp7N3GgVmWk8i",
+        "type": "plugin.added",
+        "properties": {
+          "id": "nvidia"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5545001yYxuOJ5E4wjO9l",
+        "type": "plugin.added",
+        "properties": {
+          "id": "opencode"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5545002NHemp0lKE2bxja",
+        "type": "plugin.added",
+        "properties": {
+          "id": "snowflake-cortex"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5546001YwFhhM4IHYkG52",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai-compatible"
+        }
+      }
+    },
+    {
+      "t": 17627.4,
+      "event": {
+        "id": "evt_08e0d5546002Ix7NFikUj97aFX",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openai"
+        }
+      }
+    },
+    {
+      "t": 17627.5,
+      "event": {
+        "id": "evt_08e0d5546003mALrEDsngD6DNN",
+        "type": "plugin.added",
+        "properties": {
+          "id": "openrouter"
+        }
+      }
+    },
+    {
+      "t": 17627.5,
+      "event": {
+        "id": "evt_08e0d5546004PGoyGDKYUk9slP",
+        "type": "plugin.added",
+        "properties": {
+          "id": "perplexity"
+        }
+      }
+    },
+    {
+      "t": 17627.5,
+      "event": {
+        "id": "evt_08e0d5546005EjOy51Ldwwrmn4",
+        "type": "plugin.added",
+        "properties": {
+          "id": "sap-ai-core"
+        }
+      }
+    },
+    {
+      "t": 17695.5,
+      "event": {
+        "id": "evt_08e0d5794001oK3NReylYoJ7N1",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 17695.5,
+      "event": {
+        "id": "evt_08e0d579c001c61ocb4yvGYUxi",
+        "type": "plugin.added",
+        "properties": {
+          "id": "togetherai"
+        }
+      }
+    },
+    {
+      "t": 17695.5,
+      "event": {
+        "id": "evt_08e0d57a6001BTgVHwb5HyMvYR",
+        "type": "plugin.added",
+        "properties": {
+          "id": "vercel"
+        }
+      }
+    },
+    {
+      "t": 17695.5,
+      "event": {
+        "id": "evt_08e0d57a7001BioFuLDONHfotK",
+        "type": "plugin.added",
+        "properties": {
+          "id": "venice"
+        }
+      }
+    },
+    {
+      "t": 17695.5,
+      "event": {
+        "id": "evt_08e0d57a8001M2VL2f7X74l5gJ",
+        "type": "plugin.added",
+        "properties": {
+          "id": "xai"
+        }
+      }
+    },
+    {
+      "t": 17695.5,
+      "event": {
+        "id": "evt_08e0d57a9001ivX23eINGhZlLZ",
+        "type": "plugin.added",
+        "properties": {
+          "id": "zenmux"
+        }
+      }
+    },
+    {
+      "t": 17697.1,
+      "event": {
+        "id": "evt_08e0d57ae001RyBoNj2kqKbpf4",
+        "type": "plugin.added",
+        "properties": {
+          "id": "dynamic-provider"
+        }
+      }
+    },
+    {
+      "t": 17697.1,
+      "event": {
+        "id": "evt_08e0d57b300185WBZ2YanovwN0",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-plugin"
+        }
+      }
+    },
+    {
+      "t": 17697.1,
+      "event": {
+        "id": "evt_08e0d57b50015XP4nqPwVlfLdV",
+        "type": "plugin.added",
+        "properties": {
+          "id": "config-provider"
+        }
+      }
+    },
+    {
+      "t": 17697.1,
+      "event": {
+        "id": "evt_08e0d57bd001aTkloeI6r8NKso",
+        "type": "plugin.added",
+        "properties": {
+          "id": "variant"
+        }
+      }
+    },
+    {
+      "t": 17697.1,
+      "event": {
+        "id": "evt_08e0d57be001AAwiF7eh94622N",
+        "type": "reference.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 18487,
+      "event": {
+        "id": "evt_08e0d59ae001KqPDWkgyYZs5eJ",
+        "type": "integration.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 18487,
+      "event": {
+        "id": "evt_08e0d5b190014VuCem6aSwfQDz",
+        "type": "catalog.updated",
+        "properties": {}
+      }
+    },
+    {
+      "t": 18815.8,
+      "event": {
+        "id": "evt_08e0d5c51001RHF0167knZnku7",
+        "type": "server.heartbeat",
+        "properties": {}
+      }
+    },
+    {
+      "t": 19958.9,
+      "event": {
+        "id": "evt_08e0d609b001jwHehZyaxaYYvn",
+        "type": "session.status",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "status": {
+            "type": "busy"
+          }
+        }
+      }
+    },
+    {
+      "t": 21378.1,
+      "event": {
+        "id": "evt_08e0d66460015NbHcK7N9nmNCO",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "id": "prt_08e0d6644001xNAYnPE5KKsowY",
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "snapshot": "68d285291def23366dc0e95b30e290202fd71ced",
+            "type": "step-start"
+          },
+          "time": 1789089637957
+        }
+      }
+    },
+    {
+      "t": 21378.1,
+      "event": {
+        "id": "evt_08e0d6657001KQr2wZT5tQ2Dmp",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "id": "prt_08e0d6657001M69z24QZd8fTE1",
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "type": "reasoning",
+            "text": "",
+            "time": {
+              "start": 1789089637975
+            }
+          },
+          "time": 1789089637975
+        }
+      }
+    },
+    {
+      "t": 21378.2,
+      "event": {
+        "id": "evt_08e0d66610019eL5UF5mKxMdu4",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "partID": "prt_08e0d6657001M69z24QZd8fTE1",
+          "field": "text",
+          "delta": "The user wants me to run `ls"
+        }
+      }
+    },
+    {
+      "t": 21378.2,
+      "event": {
+        "id": "evt_08e0d6662001cGjDNwu6JQvU1V",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "partID": "prt_08e0d6657001M69z24QZd8fTE1",
+          "field": "text",
+          "delta": " -1` and count"
+        }
+      }
+    },
+    {
+      "t": 21439,
+      "event": {
+        "id": "evt_08e0d6695001FkpGtjwTw6uGZi",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "partID": "prt_08e0d6657001M69z24QZd8fTE1",
+          "field": "text",
+          "delta": " the number"
+        }
+      }
+    },
+    {
+      "t": 21439,
+      "event": {
+        "id": "evt_08e0d6695002rzRa3ZeQ6x69qR",
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "partID": "prt_08e0d6657001M69z24QZd8fTE1",
+          "field": "text",
+          "delta": " of entries."
+        }
+      }
+    },
+    {
+      "t": 21440.9,
+      "event": {
+        "id": "evt_08e0d6697001gzbekrn3ncGvbt",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "id": "prt_08e0d6657001M69z24QZd8fTE1",
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "type": "reasoning",
+            "text": "The user wants me to run `ls -1` and count the number of entries.",
+            "time": {
+              "start": 1789089637975,
+              "end": 1789089638039
+            }
+          },
+          "time": 1789089638039
+        }
+      }
+    },
+    {
+      "t": 21441,
+      "event": {
+        "id": "evt_08e0d669a001qEHBOzp9xNJCoY",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "id": "prt_08e0d669a001MLc7dlRT0caxsu",
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_a97145f5b1fb4ef78f7ba479",
+            "state": {
+              "status": "pending",
+              "input": {},
+              "raw": ""
+            }
+          },
+          "time": 1789089638042
+        }
+      }
+    },
+    {
+      "t": 21583,
+      "event": {
+        "id": "evt_08e0d6716001d7IjdkbDMHsN0K",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_a97145f5b1fb4ef78f7ba479",
+            "state": {
+              "status": "running",
+              "input": {
+                "command": "ls -1"
+              },
+              "time": {
+                "start": 1789089638165
+              }
+            },
+            "id": "prt_08e0d669a001MLc7dlRT0caxsu",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA"
+          },
+          "time": 1789089638166
+        }
+      }
+    },
+    {
+      "t": 21757.9,
+      "event": {
+        "id": "evt_08e0d67df002nBeAj4FqYywJ3I",
+        "type": "permission.asked",
+        "properties": {
+          "id": "per_08e0d67df001KcekQeG7lVZ567",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "permission": "bash",
+          "patterns": [
+            "ls -1"
+          ],
+          "metadata": {
+            "command": "ls -1"
+          },
+          "always": [
+            "ls *"
+          ],
+          "tool": {
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "callID": "call_a97145f5b1fb4ef78f7ba479"
+          }
+        }
+      }
+    },
+    {
+      "t": 22156.9,
+      "event": {
+        "id": "evt_08e0d6954001UnVFRFpLN4dOOi",
+        "type": "permission.replied",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "requestID": "per_08e0d67df001KcekQeG7lVZ567",
+          "reply": "reject"
+        }
+      }
+    },
+    {
+      "t": 22156.9,
+      "event": {
+        "id": "evt_08e0d6961001JJzK0LXDrUtLDC",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_a97145f5b1fb4ef78f7ba479",
+            "state": {
+              "status": "error",
+              "input": {
+                "command": "ls -1"
+              },
+              "error": "The user rejected permission to use this specific tool call.",
+              "time": {
+                "start": 1789089638165,
+                "end": 1789089638753
+              }
+            },
+            "id": "prt_08e0d669a001MLc7dlRT0caxsu",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA"
+          },
+          "time": 1789089638753
+        }
+      }
+    },
+    {
+      "t": 22466.3,
+      "event": {
+        "id": "evt_08e0d6a9c001fxU9qCJ3nGLdp2",
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "part": {
+            "id": "prt_08e0d6a9c001sFQ1iHHCmNoaIW",
+            "reason": "tool-calls",
+            "snapshot": "68d285291def23366dc0e95b30e290202fd71ced",
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "type": "step-finish",
+            "tokens": {
+              "total": 8545,
+              "input": 8502,
+              "output": 43,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 0
+              }
+            },
+            "cost": 0
+          },
+          "time": 1789089639068
+        }
+      }
+    },
+    {
+      "t": 22466.3,
+      "event": {
+        "id": "evt_08e0d6aa2001lg67Z4wScD2plB",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "parentID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "/private/sandbox/project",
+              "root": "/private/sandbox/project"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 8545,
+              "input": 8502,
+              "output": 43,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 0
+              }
+            },
+            "modelID": "big-pickle",
+            "providerID": "opencode",
+            "time": {
+              "created": 1789089632005
+            },
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "finish": "tool-calls"
+          }
+        }
+      }
+    },
+    {
+      "t": 22802.3,
+      "event": {
+        "id": "evt_08e0d6bd70017629be6quoWPDe",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "parentID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "/private/sandbox/project",
+              "root": "/private/sandbox/project"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 8545,
+              "input": 8502,
+              "output": 43,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 0
+              }
+            },
+            "modelID": "big-pickle",
+            "providerID": "opencode",
+            "time": {
+              "created": 1789089632005,
+              "completed": 1789089639383
+            },
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "finish": "tool-calls"
+          }
+        }
+      }
+    },
+    {
+      "t": 22802.3,
+      "event": {
+        "id": "evt_08e0d6be30019jNr3HBvXH3x8Z",
+        "type": "session.status",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "status": {
+            "type": "idle"
+          }
+        }
+      }
+    },
+    {
+      "t": 22802.3,
+      "event": {
+        "id": "evt_08e0d6be3002F7glxVbo3X0hdg",
+        "type": "session.idle",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6"
+        }
+      }
+    },
+    {
+      "t": 22802.4,
+      "event": {
+        "id": "evt_08e0d6be6001i766HkRPZpPHz4",
+        "type": "session.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+            "slug": "probe",
+            "projectID": "global",
+            "directory": "/private/sandbox/project",
+            "path": "",
+            "title": "probe",
+            "agent": "build",
+            "model": {
+              "id": "big-pickle",
+              "providerID": "opencode",
+              "variant": "default"
+            },
+            "version": "0.0.0-probe",
+            "summary": {
+              "additions": 0,
+              "deletions": 0,
+              "files": 0
+            },
+            "cost": 0,
+            "tokens": {
+              "input": 8502,
+              "output": 43,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1789089614225,
+              "updated": 1789089639397
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 22802.4,
+      "event": {
+        "id": "evt_08e0d6be9001rMqdkYvjh6au8C",
+        "type": "session.diff",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "diff": []
+        }
+      }
+    },
+    {
+      "t": 22969.2,
+      "event": {
+        "id": "evt_08e0d6c90001CKv33VbqWDR2G8",
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1789089631911
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "big-pickle"
+            },
+            "summary": {
+              "diffs": []
+            },
+            "id": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+            "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6"
+          }
+        }
+      }
+    }
+  ],
+  "durable": [
+    {
+      "t": 15323.7,
+      "rowid": 1,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 0,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089614225,
+            "updated": 1789089631911
+          }
+        }
+      }
+    },
+    {
+      "t": 15348.6,
+      "rowid": 2,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 1,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "role": "user",
+          "time": {
+            "created": 1789089631911
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "opencode",
+            "modelID": "big-pickle"
+          }
+        }
+      }
+    },
+    {
+      "t": 15349,
+      "rowid": 3,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 2,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d4ebe0019qkhFUIFpq3z71",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+          "type": "text",
+          "text": "Use the bash tool to run the command `ls -1` in the current directory, then tell me how many entries it printed."
+        },
+        "time": 1789089631941
+      }
+    },
+    {
+      "t": 15349.1,
+      "rowid": 4,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 3,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089614225,
+            "updated": 1789089631945
+          }
+        }
+      }
+    },
+    {
+      "t": 15407.9,
+      "rowid": 5,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 4,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "role": "assistant",
+          "time": {
+            "created": 1789089632005
+          },
+          "parentID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+          "modelID": "big-pickle",
+          "providerID": "opencode",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "/private/sandbox/project",
+            "root": "/private/sandbox/project"
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 16344,
+      "rowid": 6,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 5,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089614225,
+            "updated": 1789089632946
+          }
+        }
+      }
+    },
+    {
+      "t": 16363.7,
+      "rowid": 7,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 6,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "role": "user",
+          "time": {
+            "created": 1789089631911
+          },
+          "summary": {
+            "diffs": []
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "opencode",
+            "modelID": "big-pickle"
+          }
+        }
+      }
+    },
+    {
+      "t": 21376.7,
+      "rowid": 8,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 7,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d6644001xNAYnPE5KKsowY",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "type": "step-start",
+          "snapshot": "68d285291def23366dc0e95b30e290202fd71ced"
+        },
+        "time": 1789089637957
+      }
+    },
+    {
+      "t": 21376.9,
+      "rowid": 9,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 8,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d6657001M69z24QZd8fTE1",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "type": "reasoning",
+          "text": "",
+          "time": {
+            "start": 1789089637975
+          }
+        },
+        "time": 1789089637975
+      }
+    },
+    {
+      "t": 21441.6,
+      "rowid": 10,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 9,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d6657001M69z24QZd8fTE1",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "type": "reasoning",
+          "text": "The user wants me to run `ls -1` and count the number of entries.",
+          "time": {
+            "start": 1789089637975,
+            "end": 1789089638039
+          }
+        },
+        "time": 1789089638039
+      }
+    },
+    {
+      "t": 21442.8,
+      "rowid": 11,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 10,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d669a001MLc7dlRT0caxsu",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "type": "tool",
+          "callID": "call_a97145f5b1fb4ef78f7ba479",
+          "tool": "bash",
+          "state": {
+            "status": "pending",
+            "input": {},
+            "raw": ""
+          }
+        },
+        "time": 1789089638042
+      }
+    },
+    {
+      "t": 21569.6,
+      "rowid": 12,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 11,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d669a001MLc7dlRT0caxsu",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "type": "tool",
+          "callID": "call_a97145f5b1fb4ef78f7ba479",
+          "tool": "bash",
+          "state": {
+            "status": "running",
+            "input": {
+              "command": "ls -1"
+            },
+            "time": {
+              "start": 1789089638165
+            }
+          }
+        },
+        "time": 1789089638166
+      }
+    },
+    {
+      "t": 22159,
+      "rowid": 13,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 12,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d669a001MLc7dlRT0caxsu",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "type": "tool",
+          "callID": "call_a97145f5b1fb4ef78f7ba479",
+          "tool": "bash",
+          "state": {
+            "status": "error",
+            "input": {
+              "command": "ls -1"
+            },
+            "error": "The user rejected permission to use this specific tool call.",
+            "time": {
+              "start": 1789089638165,
+              "end": 1789089638753
+            }
+          }
+        },
+        "time": 1789089638753
+      }
+    },
+    {
+      "t": 22482.9,
+      "rowid": 14,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 13,
+      "type": "message.part.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "part": {
+          "id": "prt_08e0d6a9c001sFQ1iHHCmNoaIW",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "snapshot": "68d285291def23366dc0e95b30e290202fd71ced",
+          "cost": 0,
+          "tokens": {
+            "total": 8545,
+            "input": 8502,
+            "output": 43,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        },
+        "time": 1789089639068
+      }
+    },
+    {
+      "t": 22483,
+      "rowid": 15,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 14,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "role": "assistant",
+          "time": {
+            "created": 1789089632005
+          },
+          "parentID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+          "modelID": "big-pickle",
+          "providerID": "opencode",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "/private/sandbox/project",
+            "root": "/private/sandbox/project"
+          },
+          "cost": 0,
+          "tokens": {
+            "total": 8545,
+            "input": 8502,
+            "output": 43,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "finish": "tool-calls"
+        }
+      }
+    },
+    {
+      "t": 22786.6,
+      "rowid": 16,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 15,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "role": "assistant",
+          "time": {
+            "created": 1789089632005,
+            "completed": 1789089639383
+          },
+          "parentID": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+          "modelID": "big-pickle",
+          "providerID": "opencode",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "/private/sandbox/project",
+            "root": "/private/sandbox/project"
+          },
+          "cost": 0,
+          "tokens": {
+            "total": 8545,
+            "input": 8502,
+            "output": 43,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "finish": "tool-calls"
+        }
+      }
+    },
+    {
+      "t": 22807.7,
+      "rowid": 17,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 16,
+      "type": "session.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "slug": "probe",
+          "projectID": "global",
+          "directory": "/private/sandbox/project",
+          "path": "",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 8502,
+            "output": 43,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "title": "probe",
+          "agent": "build",
+          "model": {
+            "id": "big-pickle",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "version": "0.0.0-probe",
+          "time": {
+            "created": 1789089614225,
+            "updated": 1789089639397
+          }
+        }
+      }
+    },
+    {
+      "t": 22982.5,
+      "rowid": 18,
+      "aggregateID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+      "seq": 17,
+      "type": "message.updated.1",
+      "data": {
+        "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+        "info": {
+          "id": "msg_08e0d4ea7001yaoZQ7l5Eb7ers",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "role": "user",
+          "time": {
+            "created": 1789089631911
+          },
+          "summary": {
+            "diffs": []
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "opencode",
+            "modelID": "big-pickle"
+          }
+        }
+      }
+    }
+  ],
+  "http": [
+    {
+      "t": 11361.2,
+      "method": "GET",
+      "path": "/session/status",
+      "auth": false,
+      "status": 401,
+      "body": null
+    },
+    {
+      "t": 11658.1,
+      "method": "GET",
+      "path": "/session/status",
+      "auth": true,
+      "status": 200,
+      "body": {}
+    },
+    {
+      "t": 11663.7,
+      "method": "GET",
+      "path": "/permission",
+      "auth": true,
+      "status": 200,
+      "body": []
+    },
+    {
+      "t": 11668,
+      "method": "GET",
+      "path": "/question",
+      "auth": true,
+      "status": 200,
+      "body": []
+    },
+    {
+      "t": 22027.5,
+      "method": "GET",
+      "path": "/permission",
+      "auth": true,
+      "status": 200,
+      "body": [
+        {
+          "id": "per_08e0d67df001KcekQeG7lVZ567",
+          "sessionID": "ses_9571d1d4439c4c02b29bd3d7f45442d6",
+          "permission": "bash",
+          "patterns": [
+            "ls -1"
+          ],
+          "metadata": {
+            "command": "ls -1"
+          },
+          "always": [
+            "ls *"
+          ],
+          "tool": {
+            "messageID": "msg_08e0d4f05001pwzGTJQVPyv2hA",
+            "callID": "call_a97145f5b1fb4ef78f7ba479"
+          }
+        }
+      ]
+    },
+    {
+      "t": 22052.9,
+      "method": "GET",
+      "path": "/session/status",
+      "auth": true,
+      "status": 200,
+      "body": {
+        "ses_9571d1d4439c4c02b29bd3d7f45442d6": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "t": 22137.9,
+      "method": "POST",
+      "path": "/permission/per_08e0d67df001KcekQeG7lVZ567/reply",
+      "auth": true,
+      "status": 200,
+      "body": true
+    }
+  ],
+  "prompts": [
+    {
+      "t": 14670.6,
+      "text": "Use the bash tool to run the command `ls -1` in the current directory, then tell me how many entries it printed."
+    }
+  ],
+  "pty": {
+    "firstOutputAt": 4559.7,
+    "bytes": 47990,
+    "exit": {
+      "exitCode": 0,
+      "signal": 0,
+      "t": 25402.3
+    },
+    "tail": "53;87;134m⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝■⬝⬝⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝■■■■⬝⬝⬝⬝■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■⬝⬝⬝⬝■■■■⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝⬝■■⬝⬝⬝⬝⬝⬝⬝■⬝⬝⬝⬝⬝⬝⬝⬝⠋ Thinking ▣ Build · Big Pickle+ ought: 64ms~ Writing command… ▣ Build · Big Pickle⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝⬝■■$ ls -1 ⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝■■■■⬝⬝⬝■■■■■⬝⬝■■■■■■$ls -1┃ ┃ △ Permission required ┃ # Shell command ┃ ┃ $ ls -1 ┃ ┃ ┃ Allow once Allow always Reject ctrl+f fullscreen ⇆ select enter confirm ┃ $ls -1 ┃ ┃ ┃ ┃Build·Big PickleOpenCode Zen╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ ■⬝⬝⬝⬝⬝⬝⬝ esc interrupt tab agents ctrl+p commands■■⬝⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝■■■■⬝⬝⬝⬝■■■■■⬝⬝⬝■■■■■■⬝⬝ 8.5K (4%)⬝■■■■■■⬝⬝⬝■■■■■■⬝⬝⬝■■■■■⬝⬝⬝⬝■■■■⬝⬝⬝⬝⬝■■■⬝⬝⬝⬝⬝⬝■■┃ Build·Big PickleOpenCode Zen╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ /tmp/opencode-terminal-headless-probe/ 8.5K (4% ctrl+p 1789089613331-36ff87/roject commands \u001b[>4;0m ▄ █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█ █ █ █ █ █▀▀▀ █ █ █ █ █ █ █ █▀▀▀ ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ Session probe Continue opencode -s ses_9571d1d4439c4c02b29bd3d7f45442d6 "
+  }
+}

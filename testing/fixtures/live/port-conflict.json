@@ -1,0 +1,27 @@
+{
+  "scenario": "port-conflict",
+  "opencodeVersion": "1.18.30",
+  "model": "opencode/big-pickle",
+  "sessionID": "ses_0b1da78affe84860964bb5ef323e5404",
+  "notes": [
+    "[17.2ms] spawn opencode --session ses_0b1da78affe84860964bb5ef323e5404 --hostname 127.0.0.1 --port 57497",
+    "[25076.7ms] timeout waiting for exit on port conflict",
+    "[25105.6ms] request to the contested port answered 418 (probe blocker)",
+    "[25105.7ms] tui still running after conflict: true",
+    "[25336.4ms] tui exited code=0 signal=15"
+  ],
+  "sse": [],
+  "durable": [],
+  "http": [],
+  "prompts": [],
+  "pty": {
+    "firstOutputAt": null,
+    "bytes": 0,
+    "exit": {
+      "exitCode": 0,
+      "signal": 15,
+      "t": 25336.4
+    },
+    "tail": ""
+  }
+}
