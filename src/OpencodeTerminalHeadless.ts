@@ -64,8 +64,13 @@ export type OpencodeTerminalHeadlessOptions = {
   sseMaxBackoffMs?: number
 }
 
+/**
+ * A channel stopped for good, and why. Only the durable channel can stop: the
+ * live channel reconnects on its own and reports trouble through
+ * `live-state` (unreachable, or a resync that came back incomplete).
+ */
 export type OpencodeTerminalError = {
-  channel: 'durable' | 'live'
+  channel: 'durable'
   code: string
   message: string
 }
@@ -130,6 +135,11 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   private client: LiveServerClient | null = null
   private stream: SseStream | null = null
   private deadlineTimer: ReturnType<typeof setTimeout> | null = null
+  private durableOpenTimer: ReturnType<typeof setTimeout> | null = null
+  private durableOpenDelayMs = 100
+  // Incremented on every live (re)connect. A resync snapshot applies only if
+  // no newer connection has started its own since.
+  private liveGeneration = 0
   private everConnected = false
   private liveState: { connected: boolean; reason?: string } | null = null
   private domainEpoch = { status: 0, requests: 0 }
@@ -281,6 +291,13 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     try {
       this.store = (this.options.openStore ?? openOpencodeStore)(dbPath)
     } catch (error) {
+      // BUSY is transient (a writer recovering the WAL, most plausibly while
+      // many panes restore at once), so the open is retried with backoff
+      // instead of disabling the pane's committed stream for its lifetime.
+      if (error instanceof OpencodeStoreError && error.code === 'busy') {
+        this.scheduleDurableOpen()
+        return
+      }
       const code = error instanceof OpencodeStoreError ? error.code : 'open_failed'
       this.reportError('durable', code, error instanceof Error ? error.message : String(error))
       return
@@ -293,6 +310,19 @@ export class OpencodeTerminalHeadless extends EventEmitter {
       onError: error => this.reportError('durable', error.code, error.message),
     })
     this.reader.start()
+    // The live channel may have connected while the open was being retried.
+    if (this.liveState?.connected) this.reader.setLiveConnected(true)
+  }
+
+  private scheduleDurableOpen(): void {
+    if (this.durableOpenTimer || this.stopped || this.exited) return
+    const delay = this.durableOpenDelayMs
+    this.durableOpenDelayMs = Math.min(delay * 2, 2_000)
+    this.durableOpenTimer = setTimeout(() => {
+      this.durableOpenTimer = null
+      if (!this.stopped && !this.exited) this.openDurable()
+    }, delay)
+    this.durableOpenTimer.unref?.()
   }
 
   private openLive(): void {
@@ -341,21 +371,33 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     // Re-sync what may have happened while we were not listening. A domain
     // whose live events arrived while the snapshot was in flight is newer on
     // the stream than in the snapshot, so its part of the snapshot is dropped.
+    //
+    // WHY a generation fence as well: a flapping connection starts one resync
+    // per open. If an older snapshot resolved after a newer one, with no bus
+    // events in between to move the domain epochs, its stale status would
+    // re-open a turn the newer snapshot had just closed.
+    //
+    // WHY each endpoint's part applies on its own: one failing endpoint (say
+    // `/question`) used to discard the status resync too. A part that failed
+    // keeps the projector's current view of that domain, which is what the
+    // stream will correct on its next event.
     const before = { ...this.domainEpoch }
+    const generation = ++this.liveGeneration
     const client = this.client
     if (!client) return
-    client.readResyncSnapshot().then(
-      snapshot => {
-        if (this.stopped || this.exited) return
-        const outputs: LiveOutput[] = this.projector.resync({
-          status: before.status === this.domainEpoch.status ? snapshot.status : undefined,
-          permissions: before.requests === this.domainEpoch.requests ? snapshot.permissions : undefined,
-          questions: before.requests === this.domainEpoch.requests ? snapshot.questions : undefined,
-        })
-        this.sequencer.onLiveOutputs(outputs)
-      },
-      error => this.reportError('live', 'resync_failed', error instanceof Error ? error.message : String(error)),
-    )
+    void client.readResyncSnapshot().then(({ snapshot, failures }) => {
+      if (this.stopped || this.exited || generation !== this.liveGeneration) return
+      const outputs: LiveOutput[] = this.projector.resync({
+        status: before.status === this.domainEpoch.status ? snapshot.status : undefined,
+        permissions: before.requests === this.domainEpoch.requests ? snapshot.permissions : undefined,
+        questions: before.requests === this.domainEpoch.requests ? snapshot.questions : undefined,
+      })
+      this.sequencer.onLiveOutputs(outputs)
+      // A failed resync does not disable anything (the stream stays up and
+      // corrects the state on its next event), so it is reported as live
+      // state, not as a `transcript-error`, which means "a channel stopped".
+      this.setLiveState(failures.length > 0 ? { connected: true, reason: `resync-incomplete: ${failures.join('; ')}` } : { connected: true })
+    })
   }
 
   private handleExit(event: { exitCode: number; signal?: number }): void {
@@ -369,6 +411,8 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   private teardown(): void {
     if (this.deadlineTimer) clearTimeout(this.deadlineTimer)
     this.deadlineTimer = null
+    if (this.durableOpenTimer) clearTimeout(this.durableOpenTimer)
+    this.durableOpenTimer = null
     this.stream?.stop()
     this.reader?.stop()
     this.store?.release()
@@ -388,7 +432,7 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     if (this.evaluator.changed(this.evaluator.keyOf(snapshot)) || force) this.emit('conditions', snapshot)
   }
 
-  private reportError(channel: 'durable' | 'live', code: string, message: string): void {
+  private reportError(channel: 'durable', code: string, message: string): void {
     this.committed.publish({ type: 'tail_error', code, message, ts: this.now() })
     this.emit('transcript-error', { channel, code, message })
   }

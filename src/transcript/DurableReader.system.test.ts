@@ -8,7 +8,7 @@ import { LiveFixtureWriter } from '../testing/fixtureDatabase.js'
 import { listDurableFixtures, loadDurableFixture, type DurableFixture } from '../testing/fixtures.js'
 import { commitFacts, projectionRecord } from '../testing/oracle.js'
 import { DurableReader, type DurableReaderError } from './DurableReader.js'
-import { openOpencodeStore, type OpencodeStore } from './OpencodeStore.js'
+import { openOpencodeStore, OpencodeStoreError, type OpencodeStore } from './OpencodeStore.js'
 import type { OpencodeMessageRecord } from './records.js'
 
 // The live-tail case: a writer applies a recorded session's events one at a
@@ -135,6 +135,49 @@ describe('DurableReader tailing a session being written', () => {
       await new Promise(resolve => setTimeout(resolve, 20))
     }
     for (const id of assistants) expect(emitted.some(entry => entry.record.info.id === id)).toBe(true)
+  })
+
+  it('retries a busy read of its starting cursor instead of disabling itself, then tails normally', async () => {
+    const fixture = loadDurableFixture(SMALL_FIXTURES[0]!)
+    const facts = commitFacts(fixture)
+    const file = join(dir, 'opencode.db')
+    writer = new LiveFixtureWriter(file, fixture.meta.sessionID, fixture.session)
+    store = openOpencodeStore(file)
+    const real = store
+    // The first cursor read meets a writer holding the database.
+    let busyReads = 1
+    const flaky = new Proxy(real, {
+      get(target, key) {
+        if (key === 'cursor' && busyReads > 0) {
+          return () => {
+            busyReads -= 1
+            throw new OpencodeStoreError('busy', 'OpenCode store read: database busy')
+          }
+        }
+        const value = Reflect.get(target, key) as unknown
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value
+      },
+    })
+    const emitted: OpencodeMessageRecord[] = []
+    const errors: DurableReaderError[] = []
+    reader = new DurableReader({
+      store: flaky,
+      sessionID: fixture.meta.sessionID,
+      onRecords: records => emitted.push(...records),
+      onError: error => errors.push(error),
+    })
+    reader.setLiveConnected(true)
+    reader.start()
+    // Not positioned yet: nothing may be read, least of all the whole log.
+    expect(reader.drainNow()).toEqual([])
+    await new Promise(resolve => setTimeout(resolve, 250))
+    for (const event of fixture.events) {
+      writer.apply(event.type, event.data)
+      reader.drainNow()
+    }
+    reader.flushPendingUsers()
+    expect(errors).toEqual([])
+    expect(new Set(emitted.map(record => record.info.id))).toEqual(new Set([...facts.expected, ...facts.removedAfterCommit]))
   })
 
   it('stops with event_version_unsupported on an unknown version, after emitting what it understood', () => {

@@ -102,6 +102,8 @@ export class ReplayServer {
   private readonly status = new Map<string, string>()
   private readonly permissions = new Map<string, Record<string, unknown>>()
   private readonly questions = new Map<string, Record<string, unknown>>()
+  private readonly failing = new Set<string>()
+  private readonly holds = new Map<string, (deliver: () => void) => void>()
   url = ''
 
   constructor(private readonly credentials: { username: string; password: string }) {}
@@ -144,6 +146,36 @@ export class ReplayServer {
     return this.streams.size
   }
 
+  /** While set, requests to `path` answer 500 (one endpoint of a re-sync failing). */
+  setFailing(path: string, failing: boolean): void {
+    if (failing) this.failing.add(path)
+    else this.failing.delete(path)
+  }
+
+  /**
+   * Hold the next request to `path`. Its answer is computed when the request
+   * arrives (the server's state at that moment) but sent only when `release`
+   * is called: a snapshot that arrives late and stale.
+   */
+  holdNext(path: string): { arrived: Promise<void>; release: () => void } {
+    let deliver: (() => void) | null = null
+    let released = false
+    let signalArrived!: () => void
+    const arrived = new Promise<void>(resolve => { signalArrived = resolve })
+    this.holds.set(path, send => {
+      deliver = send
+      signalArrived()
+      if (released) send()
+    })
+    return {
+      arrived,
+      release: () => {
+        released = true
+        deliver?.()
+      },
+    }
+  }
+
   async close(): Promise<void> {
     this.dropStreams()
     if (!this.server) return
@@ -168,9 +200,20 @@ export class ReplayServer {
         res.writeHead(401).end()
         return
       }
+      if (this.failing.has(path)) {
+        res.writeHead(500).end()
+        return
+      }
+      const hold = this.holds.get(path)
+      if (hold) this.holds.delete(path)
       const json = (value: unknown) => {
-        res.writeHead(200, { 'content-type': 'application/json' })
-        res.end(JSON.stringify(value))
+        const body = JSON.stringify(value)
+        const send = () => {
+          res.writeHead(200, { 'content-type': 'application/json' })
+          res.end(body)
+        }
+        if (hold) hold(send)
+        else send()
       }
       if (req.method === 'GET' && path === '/event') {
         if (this.refusing) {

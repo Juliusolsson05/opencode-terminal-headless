@@ -50,13 +50,19 @@ export type PrepareLaunchOptions = {
 
 export async function prepareOpencodeTerminalLaunch(options: PrepareLaunchOptions): Promise<OpencodeTerminalLaunch> {
   const password = randomBytes(24).toString('base64url')
-  const [port, db] = await Promise.all([
-    (options.allocatePort ?? allocateLoopbackPort)(),
-    (options.resolveDbPath ?? resolveOpencodeDbPath)({ binary: options.binary, env: options.env, cwd: options.cwd }).then(
-      path => ({ path, error: undefined as string | undefined }),
-      (error: unknown) => ({ path: null, error: error instanceof Error ? error.message : String(error) }),
-    ),
-  ])
+  const db = await (options.resolveDbPath ?? resolveOpencodeDbPath)({ binary: options.binary, env: options.env, cwd: options.cwd }).then(
+    path => ({ path, error: undefined as string | undefined }),
+    (error: unknown) => ({ path: null, error: error instanceof Error ? error.message : String(error) }),
+  )
+  // WHY the port is allocated last, after the db-path lookup and not beside
+  // it: the probe port is released as soon as it is chosen, and the TUI binds
+  // it only once it boots. Anything else on the machine can take it in
+  // between, and a TUI that loses its port neither exits nor paints (Stage 0).
+  // `opencode db path` runs a Bun child (0.3–2 s on a cold cache); allocating
+  // after it keeps that time out of the window. The rest, until the TUI
+  // binds, cannot be closed from here. A lost port is reported as
+  // `live-state { reason: 'server-unreachable' }`.
+  const port = await (options.allocatePort ?? allocateLoopbackPort)()
   const args = ['--session', options.sessionID, '--hostname', SERVER_HOSTNAME, '--port', String(port)]
   if (options.dangerousMode) args.push('--auto')
   return {

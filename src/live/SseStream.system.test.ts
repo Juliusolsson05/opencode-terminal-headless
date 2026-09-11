@@ -124,7 +124,8 @@ describe('LiveServerClient', () => {
       })
     })
     const client = new LiveServerClient({ baseUrl: base, username: 'opencode', password: 'pw', directory: '/p' })
-    const snapshot = await client.readResyncSnapshot()
+    const { snapshot, failures } = await client.readResyncSnapshot()
+    expect(failures).toEqual([])
     expect(snapshot.status).toEqual({ ses_a: { type: 'busy' } })
     expect(snapshot.permissions).toHaveLength(1)
     await client.replyPermission('per_1', 'once')
@@ -147,7 +148,26 @@ describe('LiveServerClient', () => {
     })
     const client = new LiveServerClient({ baseUrl: base, username: 'opencode', password: 'pw', directory: '/p', timeoutMs: 100 })
     const started = Date.now()
-    await expect(client.readResyncSnapshot()).rejects.toMatchObject({ status: null })
+    const { snapshot, failures } = await client.readResyncSnapshot()
+    expect(snapshot).toEqual({})
+    expect(failures).toHaveLength(3)
     expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('keeps the parts of a re-sync that answered when one endpoint fails', async () => {
+    const base = await listen((req, res) => {
+      if (req.url === '/question') {
+        res.writeHead(500).end()
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(req.url === '/session/status' ? '{"ses_a":{"type":"busy"}}' : '[]')
+    })
+    const client = new LiveServerClient({ baseUrl: base, username: 'opencode', password: 'pw', directory: '/p' })
+    const { snapshot, failures } = await client.readResyncSnapshot()
+    // Status and permissions still apply; the failed domain is left out, not
+    // reported as empty, so the projector keeps its own view of it.
+    expect(snapshot).toEqual({ status: { ses_a: { type: 'busy' } }, permissions: [] })
+    expect(failures).toEqual([expect.stringContaining('/question')])
   })
 })

@@ -14,10 +14,11 @@
 //   the final assistant BEFORE it emits idle — the ordering the renderer and
 //   orchestration depend on.
 //
-// Error containment: a busy database is retried on the next wake-up. A
-// version the reader does not understand, or any other read failure, disables
-// the durable channel for this session and reports why. Continuing would emit
-// a transcript with silent holes.
+// Error containment: a busy database is retried on the next wake-up, and so
+// is a busy read of the starting cursor. A version the reader does not
+// understand, or any other read failure, disables the durable channel for
+// this session and reports why. Continuing would emit a transcript with
+// silent holes.
 
 import { CommittedAssembler, DurableEventVersionError } from './CommittedAssembler.js'
 import { OpencodeStoreError, type OpencodeStore } from './OpencodeStore.js'
@@ -46,6 +47,9 @@ export class DurableReader {
   private readonly pollIntervalMs: number
   private readonly batchSize: number
   private cursor = -1
+  // False until the starting cursor is read. Nothing may drain before then:
+  // the -1 placeholder would replay the whole log.
+  private positioned = false
   private started = false
   private stopped = false
   private failed = false
@@ -70,18 +74,33 @@ export class DurableReader {
   start(fromSeq?: number): void {
     if (this.started || this.stopped) return
     this.started = true
+    this.position(fromSeq)
+  }
+
+  // WHY a busy cursor read is retried rather than failed: BUSY is transient
+  // beside a live writer (another OpenCode process recovering the WAL while
+  // this pane opens, most plausibly during a restore of many panes), and
+  // failing here disabled the pane's committed stream for its whole life.
+  // The retry reads the head as of its own moment, so anything committed
+  // during the ~100 ms wait is left to the host's history load. At pane start
+  // the TUI has not been given a prompt yet, so that window is empty in
+  // practice.
+  private position(fromSeq: number | undefined): void {
+    if (this.stopped || this.failed) return
     try {
       this.cursor = fromSeq ?? this.options.store.cursor(this.options.sessionID)
     } catch (error) {
-      this.fail(error)
+      if (error instanceof OpencodeStoreError && error.code === 'busy') this.scheduleRetry(() => this.position(fromSeq))
+      else this.fail(error)
       return
     }
+    this.positioned = true
     if (!this.liveConnected) this.startPoll()
   }
 
   /** Coalesced wake-up: many bus events in one tick cause one read. */
   ring(): void {
-    if (!this.started || this.stopped || this.failed || this.ringScheduled) return
+    if (!this.positioned || this.stopped || this.failed || this.ringScheduled) return
     this.ringScheduled = true
     queueMicrotask(() => {
       this.ringScheduled = false
@@ -91,7 +110,7 @@ export class DurableReader {
 
   /** Read everything after the cursor now, emit it, and return it. */
   drainNow(): OpencodeMessageRecord[] {
-    if (!this.started || this.stopped || this.failed) return []
+    if (!this.positioned || this.stopped || this.failed) return []
     const sessionID = this.options.sessionID
     // Collected outside the transaction callback so records committed before
     // a later event throws are still emitted: the assembler has already
@@ -120,7 +139,7 @@ export class DurableReader {
     // understood before they learn the channel stopped.
     if (emitted.length > 0) this.options.onRecords(emitted)
     if (failure !== null) {
-      if (failure instanceof OpencodeStoreError && failure.code === 'busy') this.scheduleRetry()
+      if (failure instanceof OpencodeStoreError && failure.code === 'busy') this.scheduleRetry(() => this.drainNow())
       else this.fail(failure)
     }
     return emitted
@@ -128,7 +147,7 @@ export class DurableReader {
 
   /** Commit prompts still pending at turn end. Synchronous, like drainNow. */
   flushPendingUsers(): OpencodeMessageRecord[] {
-    if (!this.started || this.stopped || this.failed) return []
+    if (!this.positioned || this.stopped || this.failed) return []
     const sessionID = this.options.sessionID
     let records: OpencodeMessageRecord[] = []
     try {
@@ -142,7 +161,7 @@ export class DurableReader {
 
   setLiveConnected(connected: boolean): void {
     this.liveConnected = connected
-    if (!this.started || this.stopped || this.failed) return
+    if (!this.positioned || this.stopped || this.failed) return
     if (connected) {
       this.stopPoll()
       // Anything written while we were polling slowly is read immediately.
@@ -190,11 +209,11 @@ export class DurableReader {
     this.pollTimer = null
   }
 
-  private scheduleRetry(): void {
+  private scheduleRetry(action: () => void): void {
     if (this.retryTimer || this.stopped) return
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null
-      this.drainNow()
+      action()
     }, 100)
     this.retryTimer.unref?.()
   }

@@ -51,17 +51,31 @@ export class LiveServerClient {
     return new URL('/event', this.options.baseUrl).toString()
   }
 
-  async readResyncSnapshot(): Promise<LiveResyncSnapshot> {
-    const [status, permissions, questions] = await Promise.all([
-      this.request('GET', '/session/status'),
-      this.request('GET', '/permission'),
-      this.request('GET', '/question'),
-    ])
-    return {
-      status: status !== null && typeof status === 'object' && !Array.isArray(status) ? (status as LiveResyncSnapshot['status']) : {},
-      permissions: Array.isArray(permissions) ? permissions : [],
-      questions: Array.isArray(questions) ? questions : [],
+  /**
+   * Current status and pending requests, each endpoint on its own: a part
+   * whose request failed is absent from `snapshot` and named in `failures`,
+   * so one failing endpoint cannot discard the others.
+   */
+  async readResyncSnapshot(): Promise<{ snapshot: Partial<LiveResyncSnapshot>; failures: string[] }> {
+    const paths = ['/session/status', '/permission', '/question'] as const
+    const [status, permissions, questions] = await Promise.allSettled(paths.map(path => this.request('GET', path)))
+    const failures: string[] = []
+    const settled = (result: PromiseSettledResult<unknown>, path: string): { value: unknown } | null => {
+      if (result.status === 'fulfilled') return { value: result.value }
+      failures.push(`${path}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`)
+      return null
     }
+    const statusPart = settled(status!, paths[0])
+    const permissionsPart = settled(permissions!, paths[1])
+    const questionsPart = settled(questions!, paths[2])
+    const snapshot: Partial<LiveResyncSnapshot> = {}
+    if (statusPart) {
+      const value = statusPart.value
+      snapshot.status = value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as LiveResyncSnapshot['status']) : {}
+    }
+    if (permissionsPart) snapshot.permissions = Array.isArray(permissionsPart.value) ? permissionsPart.value : []
+    if (questionsPart) snapshot.questions = Array.isArray(questionsPart.value) ? questionsPart.value : []
+    return { snapshot, failures }
   }
 
   async replyPermission(requestID: string, reply: PermissionReply): Promise<void> {

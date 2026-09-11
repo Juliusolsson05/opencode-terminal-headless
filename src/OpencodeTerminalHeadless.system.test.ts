@@ -12,6 +12,7 @@ import { OpencodeTerminalHeadless, type OpencodeTerminalError } from './Opencode
 import { LiveFixtureWriter } from './testing/fixtureDatabase.js'
 import { listLiveFixtures, loadLiveFixture, type LiveFixture } from './testing/fixtures.js'
 import { buildReplayScript, FakePty, playReplay, ReplayServer, sessionRowFor, settle, waitUntil, type ReplayStep } from './testing/replay.js'
+import { openOpencodeStore, OpencodeStoreError, type OpencodeStore } from './transcript/OpencodeStore.js'
 import { loadSqlite } from './transcript/sqlite.js'
 import type { OpencodeMessageRecord } from './transcript/records.js'
 
@@ -61,7 +62,10 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-async function rig(recording: LiveFixture, overrides: { password?: string; url?: string; dbPath?: string | null; deadlineMs?: number } = {}): Promise<Rig> {
+async function rig(
+  recording: LiveFixture,
+  overrides: { password?: string; url?: string; dbPath?: string | null; deadlineMs?: number; openStore?: (dbPath: string) => OpencodeStore } = {},
+): Promise<Rig> {
   const dbPath = join(dir, `${recording.scenario}-${rigs.length}.db`)
   const writer = new LiveFixtureWriter(dbPath, recording.sessionID, sessionRowFor(recording.sessionID))
   const server = new ReplayServer({ username: USER, password: PASSWORD })
@@ -84,6 +88,7 @@ async function rig(recording: LiveFixture, overrides: { password?: string; url?:
     liveConnectDeadlineMs: overrides.deadlineMs ?? 5000,
     sseInitialBackoffMs: 20,
     sseMaxBackoffMs: 80,
+    ...(overrides.openStore ? { openStore: overrides.openStore } : {}),
   })
   const log: LogEntry[] = []
   const committedFiles: string[] = []
@@ -411,6 +416,87 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(r.log.some(e => e.kind === 'entry')).toBe(false)
     expect(r.log.some(e => e.kind === 'activity' && e.active)).toBe(true)
   })
+
+  it('retries a database that is busy at open instead of disabling the durable channel', async () => {
+    const recording = loadLiveFixture('plain.json')
+    // Two opens meet a writer recovering the WAL; the third gets through.
+    let refusals = 2
+    let opened = false
+    const r = await rig(recording, {
+      openStore: path => {
+        if (refusals > 0) {
+          refusals -= 1
+          throw new OpencodeStoreError('busy', 'OpenCode schema check: database busy')
+        }
+        opened = true
+        return openOpencodeStore(path)
+      },
+    })
+    await startConnected(r)
+    await waitUntil(() => opened, 3000, 'durable open retried')
+    await playReplay(buildReplayScript(recording), r.writer, r.server)
+    await waitUntil(() => r.log.some(e => e.kind === 'semantic' && e.event.type === 'turn_completed'), 5000, 'turn end')
+    await settle(60)
+    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
+    const ids = r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id)
+    expect(new Set(ids)).toEqual(expectedCommits(recording).ids)
+    // The answer still precedes the turn's end, as with a healthy open.
+    const completeAt = indexOfKind(r.log, e => e.kind === 'semantic' && e.event.type === 'turn_completed')
+    expect(indexOfKind(r.log, e => e.kind === 'entry' && e.record.info.role === 'assistant')).toBeLessThan(completeAt)
+  })
+
+  it('ignores a re-sync snapshot that a newer connection has already superseded', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording)
+    await startConnected(r)
+    const status = (type: string) => ({ type: 'session.status', properties: { sessionID: recording.sessionID, status: { type } } })
+    r.server.send(status('busy'))
+    await waitUntil(() => r.headless.getActivity().active, 3000, 'busy')
+
+    // Connection 1's re-sync reads "busy", but its answer is held back.
+    const stale = r.server.holdNext('/session/status')
+    r.server.dropStreams()
+    await stale.arrived
+    // Connection 1 drops as well, and the turn ends while nobody listens.
+    r.server.setRefusing(true)
+    r.server.dropStreams()
+    await waitUntil(() => r.log.filter(e => e.kind === 'live-state' && !e.connected).length >= 2, 3000, 'second disconnect')
+    r.server.send(status('idle'))
+    // Connection 2 re-syncs to idle and closes the turn.
+    r.server.setRefusing(false)
+    await waitUntil(() => !r.headless.getActivity().active, 5000, 'idle from the newer re-sync')
+    const turnsBefore = r.log.filter(e => e.kind === 'semantic' && e.event.type === 'turn_started').length
+
+    // Connection 1's stale "busy" finally arrives. It must not re-open the turn.
+    stale.release()
+    await settle(150)
+    expect(r.headless.getActivity().active).toBe(false)
+    expect(r.log.filter(e => e.kind === 'semantic' && e.event.type === 'turn_started').length).toBe(turnsBefore)
+  }, 20_000)
+
+  it('applies the parts of a re-sync that answered, and reports the rest as live state, not a transcript error', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording)
+    await startConnected(r)
+    const status = (type: string) => ({ type: 'session.status', properties: { sessionID: recording.sessionID, status: { type } } })
+    r.server.send(status('busy'))
+    await waitUntil(() => r.headless.getActivity().active, 3000, 'busy')
+    // The stream drops, the turn ends unheard, and /question starts failing.
+    r.server.setRefusing(true)
+    r.server.dropStreams()
+    await waitUntil(() => r.log.some(e => e.kind === 'live-state' && !e.connected), 3000, 'disconnect')
+    r.server.send(status('idle'))
+    r.server.setFailing('/question', true)
+    r.server.setRefusing(false)
+    // The status part still ends the turn.
+    await waitUntil(() => !r.headless.getActivity().active, 5000, 'idle from a partial re-sync')
+    await waitUntil(
+      () => r.log.some(e => e.kind === 'live-state' && e.connected && (e.reason ?? '').startsWith('resync-incomplete') && (e.reason ?? '').includes('/question')),
+      3000,
+      'incomplete re-sync reported',
+    )
+    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
+  }, 20_000)
 
   it('reports a missing database path instead of guessing one', async () => {
     const r = await rig(loadLiveFixture('plain.json'), { dbPath: null })

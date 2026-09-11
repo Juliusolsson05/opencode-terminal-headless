@@ -77,8 +77,8 @@ headless.on('activity', ({ active, status }) => {})     // busy / idle, with a s
 headless.on('semantic', event => {})                    // turn_started, stream_phase, turn_completed, api_error
 headless.on('entry', record => {})                      // committed { info, parts } message
 headless.on('conditions', snapshot => {})               // opencode.permission / opencode.question
-headless.on('transcript-error', error => {})            // a channel was disabled, and why
-headless.on('live-state', ({ connected, reason }) => {})
+headless.on('transcript-error', error => {})            // the durable channel stopped, and why
+headless.on('live-state', ({ connected, reason }) => {}) // unreachable, reconnected, re-sync incomplete
 headless.on('exit', ({ exitCode }) => {})
 await headless.start()                                  // returns immediately; never waits for the server
 
@@ -108,15 +108,21 @@ The package degrades one channel at a time and always says so. It never
 produces wrong data.
 
 - **No database path, or a database it refuses** (schema gate, unknown event
-  version): `transcript-error` with a code. Activity and conditions keep
-  working.
+  version, a real read failure): `transcript-error` with a code. Only the
+  durable channel ever stops. Activity and conditions keep working.
+- **A busy database** (another OpenCode process holding it, for example while
+  recovering its WAL): retried with backoff, at open, at the starting cursor
+  and on every read. Busy never stops the channel.
 - **The TUI's server never answers**: `live-state { connected: false, reason:
   'server-unreachable' }` after the connect deadline. The usual cause is a lost
   port race, which leaves the TUI neither exiting nor painting. Committed
   messages keep arriving through the durable poll.
 - **A dropped connection**: reconnect with backoff, then re-sync status and
   pending requests. A turn that ended while nobody was listening is closed with
-  its answer first.
+  its answer first. Only the newest connection's re-sync is applied. If some
+  re-sync endpoints fail, the parts that answered still apply, and
+  `live-state { connected: true, reason: 'resync-incomplete: …' }` names the
+  rest.
 
 ## Security notes
 

@@ -357,13 +357,20 @@ export function openOpencodeStore(dbPath: string): OpencodeStore {
       if (error instanceof SqliteUnavailableError) throw new OpencodeStoreError('sqlite_unavailable', error.message, error)
       throw new OpencodeStoreError('open_failed', `Could not open OpenCode database read-only: ${error instanceof Error ? error.message : String(error)}`, error)
     }
-    const schema = (() => {
-      try {
-        return checkSchema(db)
-      } catch (error) {
-        return { ok: false as const, reason: error instanceof Error ? error.message : String(error) }
-      }
-    })()
+    // WHY SQLite errors here are translated, not reported as a schema
+    // mismatch: the schema check is the first read on a new connection, so
+    // it is where a transient BUSY (a writer recovering the WAL) lands. Calling
+    // that `unsupported_schema` told the caller to stop for good, when
+    // retrying a moment later succeeds.
+    let schema: ReturnType<typeof checkSchema>
+    try {
+      schema = checkSchema(db)
+    } catch (error) {
+      try { db.close() } catch { /* ignore */ }
+      const translated = translate(error, 'OpenCode schema check')
+      if (translated instanceof OpencodeStoreError) throw translated
+      throw new OpencodeStoreError('unsupported_schema', `OpenCode database schema is not supported: ${error instanceof Error ? error.message : String(error)}`, error)
+    }
     if (!schema.ok) {
       try { db.close() } catch { /* ignore */ }
       throw new OpencodeStoreError('unsupported_schema', `OpenCode database schema is not supported: ${schema.reason}`)
