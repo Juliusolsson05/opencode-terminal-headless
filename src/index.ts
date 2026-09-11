@@ -36,6 +36,7 @@ export {
   type OpencodeStoreErrorCode,
 } from './transcript/OpencodeStore.js'
 export type { OpencodeMessageInfo, OpencodeMessageRecord, OpencodePartRecord } from './transcript/records.js'
+export { opencodeTranscriptFile, parseOpencodeTranscriptFile } from './transcript/transcriptFile.js'
 
 export {
   PERMISSION_REPLY_ACTION,

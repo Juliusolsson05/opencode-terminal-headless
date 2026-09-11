@@ -4,9 +4,10 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { createProjectionDatabase } from '../testing/fixtureDatabase.js'
+import { createProjectionDatabase, LiveFixtureWriter } from '../testing/fixtureDatabase.js'
 import { listDurableFixtures, loadDurableFixture, type DurableFixture } from '../testing/fixtures.js'
 import { projectionRecord } from '../testing/oracle.js'
+import { sessionRowFor } from '../testing/replay.js'
 import { OpencodeStoreError, openOpencodeStore } from './OpencodeStore.js'
 import { loadSqlite } from './sqlite.js'
 
@@ -70,6 +71,51 @@ describe('OpencodeStore', () => {
       expect(store.countMessages('ses_unknown')).toBe(0)
     } finally {
       store.release()
+    }
+  })
+
+  it('walks every recorded session forward in projection order, a few messages per read', () => {
+    for (const name of listDurableFixtures()) {
+      const fixture = loadDurableFixture(name)
+      const file = join(dir, `${fixture.meta.sessionID}.db`)
+      createProjectionDatabase(fixture, file)
+      const store = openOpencodeStore(file)
+      try {
+        const walked = [...store.iterateMessages(fixture.meta.sessionID, { pageSize: 3 })]
+        expect(walked.map(record => record.info.id), name).toEqual(projectionOrder(fixture))
+        for (const record of walked) expect(record, name).toEqual(projectionRecord(fixture, record.info.id))
+        expect([...store.iterateMessages('ses_unknown')]).toEqual([])
+      } finally {
+        store.release()
+      }
+    }
+  })
+
+  it('keeps walking past a message removed between pages and includes one appended meanwhile', () => {
+    const file = join(dir, 'opencode.db')
+    const writer = new LiveFixtureWriter(file, 'ses_walk', sessionRowFor('ses_walk'))
+    const message = (id: string, created: number) =>
+      writer.apply('message.updated.1', { sessionID: 'ses_walk', info: { id, sessionID: 'ses_walk', role: 'user', time: { created } } })
+    // msg_b and msg_c share a millisecond: the id breaks the tie, as in
+    // history paging.
+    message('msg_a', 100)
+    message('msg_c', 200)
+    message('msg_b', 200)
+    message('msg_d', 300)
+    message('msg_e', 400)
+    const store = openOpencodeStore(file)
+    try {
+      const walk = store.iterateMessages('ses_walk', { pageSize: 2 })
+      const seen = [walk.next().value!.info.id, walk.next().value!.info.id]
+      expect(seen).toEqual(['msg_a', 'msg_b'])
+      // OpenCode writes while the consumer is between pages.
+      writer.apply('message.removed.1', { sessionID: 'ses_walk', messageID: 'msg_c' })
+      message('msg_f', 500)
+      for (const record of walk) seen.push(record.info.id)
+      expect(seen).toEqual(['msg_a', 'msg_b', 'msg_d', 'msg_e', 'msg_f'])
+    } finally {
+      store.release()
+      writer.close()
     }
   })
 

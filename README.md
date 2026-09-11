@@ -91,8 +91,16 @@ sibling packages' shape, plus `getActivity()`, `getConditionSnapshot()` and
 `getProviderSessionId()`.
 
 `openOpencodeStore(dbPath)` reads history without a running TUI:
-`readHistory(sessionID, { limit, beforeMessageID })`. Agent Code uses it for
-parked agents and MCP transcript reads.
+`readHistory(sessionID, { limit, beforeMessageID })` pages back from the
+newest message, `iterateMessages(sessionID)` walks the whole session forward a
+page at a time, and `countMessages(sessionID)` gives the total. Agent Code uses
+them for parked agents and MCP transcript reads.
+
+OpenCode has no transcript file, so where file-backed providers publish a JSONL
+path this package publishes `opencode://session/<id>`
+(`getTranscriptFile()`). `parseOpencodeTranscriptFile(locator)` returns the
+session id, or null for anything else, so a host can route a locator to the
+store and everything else to its file reader.
 
 ## Degradation
 

@@ -82,6 +82,12 @@ export type OpencodeStore = {
    * indicator and its "has this session written anything yet" check).
    */
   countMessages(sessionID: string): number
+  /**
+   * Every message of the session, oldest first, read `pageSize` messages at a
+   * time. For whole-session consumers (a host's transcript search) that must
+   * not hold a long session in memory at once.
+   */
+  iterateMessages(sessionID: string, opts?: { pageSize?: number }): Generator<OpencodeMessageRecord, void, undefined>
   readSessionInfo(sessionID: string): OpencodeSessionInfo | null
   readChildSessionIDs(sessionID: string): string[]
   release(): void
@@ -95,6 +101,7 @@ type Statements = {
   historyNewest: SqliteStatement
   historyAnchor: SqliteStatement
   historyBefore: SqliteStatement
+  forwardAfter: SqliteStatement
   session: SqliteStatement
   children: SqliteStatement
   count: SqliteStatement
@@ -128,6 +135,13 @@ function prepareStatements(db: SqliteDatabase): Statements {
     historyBefore: db.prepare(
       `SELECT id, data FROM message WHERE session_id = ? AND (time_created < ? OR (time_created = ? AND id < ?))
        ORDER BY time_created DESC, id DESC LIMIT ?`,
+    ),
+    // The same (time_created, id) order as history, walked forward from a
+    // key rather than a message id, so a message removed between pages cannot
+    // strand the walk (see iterateMessages).
+    forwardAfter: db.prepare(
+      `SELECT id, time_created FROM message WHERE session_id = ? AND (time_created > ? OR (time_created = ? AND id > ?))
+       ORDER BY time_created, id LIMIT ?`,
     ),
     session: db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session WHERE id = ?'),
     children: db.prepare('SELECT id FROM session WHERE parent_id = ? ORDER BY time_created'),
@@ -256,6 +270,39 @@ class Handle implements OpencodeStore {
 
   countMessages(sessionID: string): number {
     return this.read(() => Number(this.entry.statements.count.get(sessionID)?.n ?? 0))
+  }
+
+  // WHY pages, each in its own read transaction, instead of one snapshot for
+  // the whole walk: a generator is resumed on the consumer's schedule, and a
+  // read transaction held open across those pauses would pin OpenCode's WAL
+  // (it cannot checkpoint past a reader's mark) for as long as a host takes to
+  // search a long session. Each page is a consistent snapshot; between pages
+  // the walk sees OpenCode's later commits, which is what a reader of a live
+  // session wants anyway: messages appended meanwhile are included, and one
+  // removed meanwhile is skipped rather than ending the walk, because the
+  // cursor is a (time_created, id) key, not a row that must still exist.
+  *iterateMessages(sessionID: string, opts: { pageSize?: number } = {}): Generator<OpencodeMessageRecord, void, undefined> {
+    const pageSize = Math.max(1, Math.floor(opts.pageSize ?? 100))
+    // time_created is epoch milliseconds, never negative, and every id sorts
+    // after the empty string, so this key precedes the first message.
+    let afterCreated = -1
+    let afterID = ''
+    for (;;) {
+      const page = this.read(tx => {
+        const rows = this.entry.statements.forwardAfter.all(sessionID, afterCreated, afterCreated, afterID, pageSize)
+        const records: OpencodeMessageRecord[] = []
+        for (const row of rows) {
+          const record = tx.loadMessage(sessionID, String(row.id))
+          if (record) records.push(record)
+        }
+        const last = rows[rows.length - 1]
+        return { records, last: last ? { created: Number(last.time_created), id: String(last.id) } : null, full: rows.length === pageSize }
+      })
+      yield* page.records
+      if (!page.last || !page.full) return
+      afterCreated = page.last.created
+      afterID = page.last.id
+    }
   }
 
   readSessionInfo(sessionID: string): OpencodeSessionInfo | null {

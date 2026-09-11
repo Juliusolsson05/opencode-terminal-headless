@@ -47,6 +47,7 @@ import { PtyBinding, type PtyLike } from './terminal/PtyBinding.js'
 import { DurableReader } from './transcript/DurableReader.js'
 import { openOpencodeStore, OpencodeStoreError, type OpencodeStore } from './transcript/OpencodeStore.js'
 import type { OpencodeMessageRecord } from './transcript/records.js'
+import { opencodeTranscriptFile } from './transcript/transcriptFile.js'
 
 export type OpencodeTerminalHeadlessOptions = {
   pty: PtyLike
@@ -141,7 +142,7 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     this.launch = options.launch
     this.now = options.now ?? Date.now
     this.binding = new PtyBinding(options.pty)
-    this.file = `opencode://session/${options.launch.sessionID}`
+    this.file = opencodeTranscriptFile(options.launch.sessionID)
     this.projector = new LiveStateProjector(options.launch.sessionID, {
       now: this.now,
       isDescendant: sessionID => this.isDescendant(sessionID),
