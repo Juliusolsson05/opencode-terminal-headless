@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/**/*.test.ts",
+    // WHY src/testing is excluded from the build but not from typecheck: the
+    // fixture loaders are test-only code that must still be type-checked
+    // (tsconfig.json includes them), but shipping them in dist would publish
+    // recording plumbing as if it were public API.
+    "src/testing/**"
+  ]
+}
