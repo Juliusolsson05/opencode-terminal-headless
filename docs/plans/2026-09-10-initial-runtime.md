@@ -2,7 +2,7 @@
 
 Status: P0–P5 implemented on `feat/initial-runtime`, package PR #1; durable
 review follow-up on 2026-09-11. Agent Code issue #864 and PR #882 own host
-integration. Changes remain uncommitted for the coordinating implementer.
+integration. (Status note, now historical: this said changes remained uncommitted for the coordinating implementer. They are committed.)
 
 The package adapts the native OpenCode TUI to Agent Code's committed records,
 activity, semantic turns/phases and permission/question conditions. The caller
@@ -69,7 +69,7 @@ runtime.on('activity', state => consume(state))
 runtime.on('conditions', snapshot => consume(snapshot))
 runtime.on('transcript-error', error => consume(error))
 runtime.on('live-state', state => consume(state))
-runtime.on('session-switched', event => consume(event)) // detect; host replaces
+runtime.on('session-switched', event => consume(event)) // DETECTION ONLY: the host reports the mismatch and keeps following the launch session (agent-code#894)
 runtime.on('exit', event => consume(event))
 await runtime.start()
 
