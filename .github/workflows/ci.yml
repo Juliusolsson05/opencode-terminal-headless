@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    uses: Juliusolsson05/agent-code/.github/workflows/reusable-package-ci.yml@04071925e234eb9ec76f0b9c3a4daec58710e551
+    with:
+      # WHY 22.13.0 is the floor, not the shared default of 22: node:sqlite
+      # became available without --experimental-sqlite in 22.13.0, and the
+      # durable reader depends on it. Pinning the literal floor catches code
+      # that only works on the Node 24 development default.
+      node-versions: '["22.13.0", "24"]'

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+# Live probe scratch output (sandbox HOME/XDG trees). Recorded fixtures are
+# written explicitly under testing/fixtures/ and reviewed before committing.
+.probe/
