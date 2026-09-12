@@ -139,6 +139,11 @@ export class LiveStateProjector {
   private readonly sessionParents = new Map<string, string | null>()
   private readonly userMessagesSeen = new Set<string>()
   private readonly busySessions = new Set<string>()
+  // Per-session revision of `busySessions`, stamped by the bus and fenced
+  // against in `resync`. A single status revision cannot serve here: it tracks
+  // only the OWNED session, while this map deliberately spans every root the
+  // TUI might switch to.
+  private readonly busyRevisions = new Map<string, number>()
 
   constructor(private readonly sessionID: string, options: LiveStateProjectorOptions = {}) {
     this.now = options.now ?? Date.now
@@ -158,8 +163,8 @@ export class LiveStateProjector {
     if (event.type === 'session.created' || event.type === 'session.updated') this.learnSession(obj(props.info))
     if (eventSession && (event.type === 'session.status' || event.type === 'session.idle')) {
       const type = event.type === 'session.idle' ? 'idle' : str(obj(props.status).type)
-      if (type === 'idle') this.busySessions.delete(eventSession)
-      else if (type === 'busy' || type === 'retry') this.busySessions.add(eventSession)
+      if (type === 'idle') this.setBusy(eventSession, false)
+      else if (type === 'busy' || type === 'retry') this.setBusy(eventSession, true)
     }
     const switched = event.type === 'message.updated' ? this.observeUserMessage(props) : []
 
@@ -219,11 +224,23 @@ export class LiveStateProjector {
    */
   resync(snapshot: Partial<LiveResyncSnapshot>, since: number = this.revisionCounter): LiveOutput[] {
     const out: LiveOutput[] = []
-    if (snapshot.status && !this.statusChangedSince(since)) {
-      const type = str(snapshot.status[this.sessionID]?.type)
-      // The status map lists only non-idle sessions ({} when idle).
-      if (type && type !== 'idle') out.push(...this.applyStatus(type, obj(snapshot.status[this.sessionID])))
-      else out.push(...this.endTurn())
+    if (snapshot.status) {
+      // Switch detection reads `busySessions` for EVERY root, not just ours,
+      // and only bus events used to write it. Across a disconnect that left it
+      // describing the world as it was before the outage: a root that went
+      // idle while we were away stayed "busy", so the user's next prompt there
+      // was swallowed as background noise and the switch was never reported;
+      // a root that went busy while we were away stayed "idle", so its next
+      // automatic message looked like a switch that never happened. The
+      // snapshot is authoritative for exactly this, so the whole map is
+      // reconciled from it — including deleting sessions it no longer lists.
+      this.reconcileBusy(snapshot.status, since)
+      if (!this.statusChangedSince(since)) {
+        const type = str(snapshot.status[this.sessionID]?.type)
+        // The status map lists only non-idle sessions ({} when idle).
+        if (type && type !== 'idle') out.push(...this.applyStatus(type, obj(snapshot.status[this.sessionID])))
+        else out.push(...this.endTurn())
+      }
     }
     if (snapshot.permissions) {
       const listed = snapshot.permissions.map(item => permissionFromPayload(obj(item))).filter((p): p is PendingPermission => p !== null)
@@ -345,6 +362,41 @@ export class LiveStateProjector {
     const from = this.drivenSessionID
     this.drivenSessionID = sessionID
     return [{ kind: 'session-switched', from, to: sessionID }]
+  }
+
+  private setBusy(sessionID: string, busy: boolean): void {
+    if (busy) this.busySessions.add(sessionID)
+    else this.busySessions.delete(sessionID)
+    this.revisionCounter += 1
+    this.busyRevisions.set(sessionID, this.revisionCounter)
+  }
+
+  /**
+   * Take the snapshot's view of which sessions are busy, per session.
+   *
+   * The fence is per session and not domain-wide on purpose: a status event
+   * arriving for ONE session while the snapshot is in flight must not discard
+   * the snapshot's account of every OTHER session — that is the same mistake
+   * the request reconciler already documents. A session the stream restated
+   * after `since` keeps the bus's newer value; everything else, present or
+   * absent, follows the snapshot.
+   */
+  private reconcileBusy(status: Record<string, unknown>, since: number): void {
+    const busyNow = new Set(
+      Object.keys(status).filter(id => {
+        const type = str(obj(status[id]).type)
+        return type !== undefined && type !== 'idle'
+      }),
+    )
+    for (const id of busyNow) {
+      if ((this.busyRevisions.get(id) ?? 0) > since) continue
+      this.busySessions.add(id)
+    }
+    for (const id of [...this.busySessions]) {
+      if (busyNow.has(id)) continue
+      if ((this.busyRevisions.get(id) ?? 0) > since) continue
+      this.busySessions.delete(id)
+    }
   }
 
   private stampStatus(): void {

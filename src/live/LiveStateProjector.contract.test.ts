@@ -202,6 +202,49 @@ describe('session-switch detection (detection only)', () => {
     expect(run(looked, [user('ses_child', 'msg_c1')]).filter(o => o.kind === 'session-switched')).toEqual([])
   })
 
+  // The three cases below are the reconnect boundary. Switch detection reads a
+  // busy map that ONLY bus events used to write, so across a disconnect it kept
+  // describing the world as it was before the outage. Existing switch tests all
+  // deliver the relevant busy/idle directly on the stream, so none of them can
+  // reach this.
+  it('reports a switch to a root that went idle while we were disconnected', () => {
+    const projector = new LiveStateProjector(A, { parentOf: id => (id === 'ses_b' ? null : undefined) })
+    // B is busy in the background before the outage: its automatic messages are
+    // correctly ignored as someone else's work.
+    run(projector, [status('ses_b', 'busy')])
+    const since = projector.revision()
+    // While disconnected B finished. The snapshot lists only non-idle sessions,
+    // so B's absence IS the statement that it is idle.
+    projector.resync({ status: {} }, since)
+    // The user then chooses B in the TUI and prompts it. Before the fix the
+    // stale "B is busy" entry swallowed this as background noise, and the pane
+    // silently kept following A while the TUI drove B.
+    expect(run(projector, [user('ses_b', 'msg_b1')]).filter(o => o.kind === 'session-switched'))
+      .toEqual([{ kind: 'session-switched', from: A, to: 'ses_b' }])
+  })
+
+  it('does not invent a switch for a root that went busy while we were disconnected', () => {
+    const projector = new LiveStateProjector(A, { parentOf: id => (id === 'ses_b' ? null : undefined) })
+    const since = projector.revision()
+    projector.resync({ status: { ses_b: { type: 'busy' } } }, since)
+    // An automatic message inside B's own running turn (compaction, a summary
+    // rewrite) is not the user navigating. Before the fix the map had never
+    // learned B was busy, so this raised a false switch — which the host turns
+    // into a persistent pane error accusing the user of something they did not do.
+    expect(run(projector, [user('ses_b', 'msg_auto')]).filter(o => o.kind === 'session-switched')).toEqual([])
+  })
+
+  it('keeps a status the stream restated while the snapshot was in flight', () => {
+    const projector = new LiveStateProjector(A, { parentOf: id => (id === 'ses_b' ? null : undefined) })
+    const since = projector.revision()
+    // The snapshot was requested, then the bus said B is busy before it landed.
+    run(projector, [status('ses_b', 'busy')])
+    // A snapshot captured BEFORE that event must not undo it, or the race
+    // reintroduces the false switch the previous case protects against.
+    projector.resync({ status: {} }, since)
+    expect(run(projector, [user('ses_b', 'msg_auto')]).filter(o => o.kind === 'session-switched')).toEqual([])
+  })
+
   it('does not guess when a session\'s parentage is unknown', () => {
     const projector = new LiveStateProjector(A, { parentOf: () => undefined })
     expect(run(projector, [user('ses_unknown', 'msg_x')])).toEqual([])
