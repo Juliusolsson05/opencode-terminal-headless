@@ -56,6 +56,35 @@ export type OpencodeSessionInfo = {
   directory: string
   title: string
   timeUpdated: number
+  /**
+   * The agent and model this session last ran with, as OpenCode itself
+   * persisted them.
+   *
+   * WHY this is read at all: a programmatic prompt MUST send the agent, model
+   * and variant explicitly. Omitting them does not mean "use the session's
+   * choice" — in 1.18.30 `SessionPrompt.createUserMessage` falls back to
+   * `Agent.defaultInfo()`, the configured DEFAULT agent, and then persists that
+   * replacement with `Session.setAgentModel`. A user on `plan` who received a
+   * prompt from Agent Code would silently be moved to `build`, losing that
+   * agent's tool policy along with the model variant.
+   *
+   * WHY the session row and not an HTTP round-trip: `setAgentModel` writes
+   * exactly these two fields onto this row, so it IS OpenCode's own record of
+   * the selection, and reading it costs nothing on a statement we already run.
+   *
+   * The known limit: the row records the selection that has last been USED.
+   * A choice the user changed in the TUI but has not prompted with yet is not
+   * observable here, and we do not pretend otherwise.
+   */
+  selection: OpencodeSessionSelection
+}
+
+/** Null fields mean the row has never recorded a choice; send nothing for them. */
+export type OpencodeSessionSelection = {
+  agent: string | null
+  providerID: string | null
+  modelID: string | null
+  variant: string | null
 }
 
 export type HistoryPage = { records: OpencodeMessageRecord[]; hasOlder: boolean }
@@ -197,7 +226,7 @@ function prepareStatements(db: SqliteDatabase): Statements {
       `SELECT id, time_created FROM message WHERE session_id = ? AND (time_created > ? OR (time_created = ? AND id > ?))
        ORDER BY time_created, id LIMIT ?`,
     ),
-    session: db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session WHERE id = ?'),
+    session: openSessionStatement(db),
     // WHY root-only and exact directory: task children are implementation
     // details, not conversations the Resume picker should offer. Prefix path
     // matching would mix adjacent projects. The optional directory also lets
@@ -229,6 +258,71 @@ function translate(error: unknown, context: string): unknown {
   const base = typeof errcode === 'number' ? errcode & 0xff : null
   if (base === 5 || base === 6) return new OpencodeStoreError('busy', `${context}: database busy`, error)
   return new OpencodeStoreError('read_failed', `${context}: ${error instanceof Error ? error.message : String(error)}`, error)
+}
+
+/**
+ * Prepare the single-session read, including the selection columns only when
+ * this database actually has them.
+ *
+ * WHY a probe rather than a required column: `agent` and `model` matter for
+ * prompting, not for reading a transcript. A build without them must still get
+ * working history, so their absence degrades to "we do not know the selection"
+ * instead of failing the schema gate and stopping the durable channel. Probing
+ * once at prepare time keeps every later read on one prepared statement.
+ */
+function openSessionStatement(db: SqliteDatabase): SqliteStatement {
+  let columns = 'id, parent_id, directory, title, time_updated'
+  try {
+    const present = new Set(db.prepare('PRAGMA table_info("session")').all().map(row => String(row.name)))
+    if (present.has('agent')) columns += ', agent'
+    if (present.has('model')) columns += ', model'
+  } catch {
+    // A PRAGMA that cannot answer leaves the base columns, which the schema
+    // gate has already proven exist.
+  }
+  return db.prepare(`SELECT ${columns} FROM session WHERE id = ?`)
+}
+
+/**
+ * Read the session's persisted agent/model selection.
+ *
+ * WHY this tolerates every shape instead of validating one: `session.model` is
+ * written by OpenCode as a JSON object (`{id, providerID, variant}` in 1.18.30),
+ * but this column is not part of any contract we control, and the schema gate
+ * only promises the column EXISTS. A malformed or future-shaped value must
+ * degrade to "we do not know the selection" — which makes the prompt behave
+ * exactly as it did before we read it at all — rather than throwing and taking
+ * down a history read that has nothing to do with prompting.
+ */
+function readSelection(row: Record<string, unknown>): OpencodeSessionSelection {
+  const agent = typeof row.agent === 'string' && row.agent.length > 0 ? row.agent : null
+  let model: Record<string, unknown> | null = null
+  if (row.model != null) {
+    try {
+      const parsed: unknown = typeof row.model === 'string' ? JSON.parse(row.model) : row.model
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        model = parsed as Record<string, unknown>
+      }
+    } catch {
+      model = null
+    }
+  }
+  const text = (value: unknown): string | null => (typeof value === 'string' && value.length > 0 ? value : null)
+  // OpenCode stores the model id under `id`, not `modelID`: `setAgentModel`
+  // writes `{ id: model.modelID, providerID, variant }`. Accept `modelID` too,
+  // because the same logical field is spelled that way on the prompt input and
+  // a future writer could converge on it.
+  const variant = model ? text(model.variant) : null
+  return {
+    agent,
+    providerID: model ? text(model.providerID) : null,
+    modelID: model ? (text(model.id) ?? text(model.modelID)) : null,
+    // "default" is OpenCode's own sentinel for "no variant chosen", written by
+    // `setAgentModel` as `variant ?? "default"`. Forwarding it verbatim would
+    // pin the prompt to a literal variant named "default" and suppress the
+    // agent's configured one, so it is normalised back to "unset" here.
+    variant: variant === 'default' ? null : variant,
+  }
 }
 
 function parseEventType(type: string): { name: string; version: number } {
@@ -394,6 +488,7 @@ class Handle implements OpencodeStore {
         directory: String(row.directory),
         title: String(row.title),
         timeUpdated: Number(row.time_updated),
+        selection: readSelection(row),
       }
     })
   }

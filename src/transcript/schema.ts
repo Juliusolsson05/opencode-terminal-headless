@@ -27,6 +27,14 @@
 import type { SqliteDatabase } from './sqlite.js'
 
 export const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  // WHY `agent`/`model` are deliberately NOT here, although a statement reads
+  // them: the gate's rule is that a listed column is one the reader cannot work
+  // without. Those two feed the prompt's agent/model preservation only. Making
+  // them required would refuse the whole database — and with it all history —
+  // on an OpenCode build that happens not to have them, which is exactly the
+  // "one channel's problem stops another" failure this package exists to avoid.
+  // `openSessionStatement` probes for them instead and degrades to "selection
+  // unknown", the behavior we had before we read them at all.
   session: ['id', 'parent_id', 'directory', 'title', 'time_updated', 'time_created'],
   message: ['id', 'session_id', 'time_created', 'data'],
   part: ['id', 'message_id', 'data'],

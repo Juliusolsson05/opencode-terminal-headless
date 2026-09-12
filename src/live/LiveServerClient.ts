@@ -50,6 +50,18 @@ export type LiveServerClientOptions = {
   timeoutMs?: number
 }
 
+/**
+ * The agent/model/variant a prompt must carry. Every field is optional because
+ * a session that has never recorded a choice genuinely has none, and inventing
+ * one would be a different bug from the one this exists to prevent.
+ */
+export type PromptSelection = {
+  agent: string | null
+  providerID: string | null
+  modelID: string | null
+  variant: string | null
+}
+
 export class LiveServerRequestError extends Error {
   constructor(readonly status: number | null, message: string) {
     super(message)
@@ -133,8 +145,34 @@ export class LiveServerClient {
    * would silently override the user's selection. A 2xx is the acceptance
    * acknowledgement; there need not be a JSON response body (204 is normal).
    */
-  async submitPrompt(sessionID: string, text: string, timeoutMs?: number): Promise<void> {
-    await this.request('POST', `/session/${encodeURIComponent(sessionID)}/prompt_async`, { parts: [{ type: 'text', text }] }, { timeoutMs, acceptanceOnly: true })
+  /**
+   * Submit a prompt to the TUI's own server.
+   *
+   * WHY `selection` is sent explicitly rather than omitted: omitting `agent`
+   * does NOT mean "keep whatever the TUI is using". In 1.18.30
+   * `SessionPrompt.createUserMessage` resolves
+   * `input.agent ? Agent.get(input.agent) : Agent.defaultInfo()` — the
+   * CONFIGURED DEFAULT agent — and then persists that choice onto the session
+   * with `Session.setAgentModel`. A user working in `plan` would be silently
+   * moved to `build`, changing the tool policy their next turn runs under.
+   *
+   * WHY the model and variant travel with it: the model falls back
+   * `input.model ?? agent.model ?? lastModel(session)`. Sending an agent
+   * without its model lets THAT agent's configured model override the
+   * session's, so the three fields only preserve the user's state together.
+   *
+   * Each field is omitted when unknown, which restores the old behavior for
+   * that field alone — a session that never recorded a choice is one where the
+   * server's default IS the right answer.
+   */
+  async submitPrompt(sessionID: string, text: string, selection: PromptSelection, timeoutMs?: number): Promise<void> {
+    const body: Record<string, unknown> = { parts: [{ type: 'text', text }] }
+    if (selection.agent) body.agent = selection.agent
+    if (selection.providerID && selection.modelID) {
+      body.model = { providerID: selection.providerID, modelID: selection.modelID }
+    }
+    if (selection.variant) body.variant = selection.variant
+    await this.request('POST', `/session/${encodeURIComponent(sessionID)}/prompt_async`, body, { timeoutMs, acceptanceOnly: true })
   }
 
   private async request(method: 'GET' | 'POST', path: string, body?: unknown, options: { timeoutMs?: number; acceptanceOnly?: boolean } = {}): Promise<unknown> {

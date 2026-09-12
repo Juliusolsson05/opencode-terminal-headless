@@ -299,7 +299,16 @@ describe('OpencodeStore', () => {
     expect(store.readHistory('ses_min', { limit: 1, beforeMessageID: 'msg_gone' }).records.map(record => record.info.id)).toEqual(['msg_2'])
     expect(store.countMessages('ses_min')).toBe(2)
     expect([...store.iterateMessages('ses_min', { pageSize: 1 })].map(record => record.info.id)).toEqual(['msg_1', 'msg_2'])
-    expect(store.readSessionInfo('ses_min')).toEqual({ id: 'ses_min', parentID: null, directory: '/p', title: 'minimal', timeUpdated: 5 })
+    // This database has ONLY the gate's columns, so it has no `agent`/`model`.
+    // That is a supported state, not a refusal: those two feed the prompt's
+    // agent/model preservation alone, and listing them in the gate would take
+    // every transcript in the database down with them on a build that lacks
+    // them. The contract is an unknown selection — exactly how prompting
+    // behaved before the store read them at all.
+    expect(store.readSessionInfo('ses_min')).toEqual({
+      id: 'ses_min', parentID: null, directory: '/p', title: 'minimal', timeUpdated: 5,
+      selection: { agent: null, providerID: null, modelID: null, variant: null },
+    })
   })
 
   it('refuses a database missing a table the reader needs (fail closed)', () => {

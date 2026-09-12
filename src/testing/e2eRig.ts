@@ -71,6 +71,13 @@ export type RigOverrides = {
    * whose session row is added to the shared file.
    */
   sameDatabaseAs?: Rig
+  /**
+   * Extra columns for the session row this rig seeds — `agent` and `model` in
+   * practice, so a test can stand a session up on a NON-default agent. That
+   * case is the whole point of reading the selection: a session already on
+   * `build` cannot show whether we preserved it or defaulted into it.
+   */
+  sessionRow?: Record<string, unknown>
 }
 
 /**
@@ -110,9 +117,10 @@ export function useReplayRigs(): {
   const rig = async (recording: LiveFixture, overrides: RigOverrides = {}): Promise<Rig> => {
     const shared = overrides.sameDatabaseAs
     const dbPath = shared ? shared.dbPath : join(dir, `${recording.scenario}-${count++}.db`)
-    const writer = shared ? shared.writer : new LiveFixtureWriter(dbPath, recording.sessionID, sessionRowFor(recording.sessionID))
+    const seedRow = { ...sessionRowFor(recording.sessionID), ...overrides.sessionRow }
+    const writer = shared ? shared.writer : new LiveFixtureWriter(dbPath, recording.sessionID, seedRow)
     if (!shared) cleanups.push(() => writer.close())
-    else if (shared.sessionID !== recording.sessionID) writer.addSession({ ...sessionRowFor(recording.sessionID), id: recording.sessionID })
+    else if (shared.sessionID !== recording.sessionID) writer.addSession({ ...seedRow, id: recording.sessionID })
     const server = new ReplayServer({ username: RIG_USER, password: RIG_PASSWORD })
     cleanups.push(() => server.close())
     await server.listen()

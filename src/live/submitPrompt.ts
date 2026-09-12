@@ -1,11 +1,30 @@
 import { performance } from 'node:perf_hooks'
 
-import { LiveServerRequestError, type LiveServerClient } from './LiveServerClient.js'
+import { LiveServerRequestError, type LiveServerClient, type PromptSelection } from './LiveServerClient.js'
 
 export type SubmitPromptOptions = { timeoutMs?: number }
+
+/**
+ * Why there are four reasons and not three:
+ *
+ * `unreachable` and `unknown` used to be one value, and that conflation was a
+ * real defect. The host turns a failure into a retry decision, and those two
+ * cases are opposites: `unreachable` means the request never left, so retrying
+ * is free; `unknown` means the POST was dispatched and we never learned its
+ * fate, and OpenCode's route FORKS the prompt work before it answers — so the
+ * model may already be running. Retrying there submits the user's work twice.
+ *
+ * The boundary is the hand-off to the transport, not the arrival of a
+ * response. When we cannot tell, the answer is `unknown`: a false "it did not
+ * land" costs duplicated work, while a false "we are not sure" costs one
+ * manual check.
+ *
+ * Retry-safety is a property of the reason. Never re-derive it from `detail`,
+ * which exists only for humans.
+ */
 export type SubmitPromptResult =
   | { ok: true }
-  | { ok: false; reason: 'no-live-channel' | 'unreachable' | 'rejected'; detail?: string }
+  | { ok: false; reason: 'no-live-channel' | 'unreachable' | 'unknown' | 'rejected'; detail?: string }
 
 type Readiness = 'ready' | 'waiting' | 'closed'
 type DeliveryOptions = {
@@ -13,6 +32,13 @@ type DeliveryOptions = {
   timeoutMs: number
   state: () => Readiness
   subscribe: (check: () => void) => () => void
+  /**
+   * Resolved as late as possible, immediately before the POST: the user may
+   * change agent or model in the TUI while we are still waiting to connect,
+   * and the selection that matters is the one in force when the prompt is
+   * actually sent.
+   */
+  selection: () => PromptSelection
 }
 
 /**
@@ -35,15 +61,22 @@ export async function submitLivePrompt(client: LiveServerClient, text: string, o
   // re-sync. Re-read readiness above: a host may stop or disconnect the pane
   // in those callbacks before this promise gets its next turn.
   const remaining = Math.ceil(deadline - performance.now())
-  if (remaining <= 0) return { ok: false, reason: 'unreachable', detail: 'Prompt deadline expired' }
+  if (remaining <= 0) return { ok: false, reason: 'unreachable', detail: 'Prompt deadline expired before the request was sent' }
   try {
-    await client.submitPrompt(options.sessionID, text, remaining)
+    await client.submitPrompt(options.sessionID, text, options.selection(), remaining)
     return { ok: true }
   } catch (error) {
+    // Past this line the request was handed to the transport, so anything
+    // other than an explicit HTTP status leaves acceptance genuinely unknown:
+    // a timeout, a reset and a dropped response are indistinguishable from a
+    // prompt the server accepted and is already running.
+    if (error instanceof LiveServerRequestError && error.status !== null) {
+      return { ok: false, reason: 'rejected', detail: error.message }
+    }
     return {
       ok: false,
-      reason: error instanceof LiveServerRequestError && error.status !== null ? 'rejected' : 'unreachable',
-      detail: error instanceof Error ? error.message : String(error),
+      reason: 'unknown',
+      detail: `${error instanceof Error ? error.message : String(error)} — the server may have accepted this prompt; do not resend it blindly`,
     }
   }
 }

@@ -308,6 +308,11 @@ export class OpencodeTerminalHeadless extends EventEmitter {
    * Deliver to the bound session once its live channel has connected and
    * re-synced. The deadline covers both startup waiting and the HTTP request;
    * a 2xx acknowledges acceptance, not completion of the model's turn.
+   *
+   * The prompt carries the session's own agent/model/variant. It has to: the
+   * server resolves an omitted agent to the CONFIGURED DEFAULT and then
+   * persists that over the user's choice, so a prompt sent from Agent Code
+   * would otherwise move a `plan` session to `build` and drop its variant.
    */
   submitPrompt(text: string, opts: SubmitPromptOptions = {}): Promise<SubmitPromptResult> {
     const client = this.client
@@ -322,6 +327,17 @@ export class OpencodeTerminalHeadless extends EventEmitter {
       subscribe: check => {
         this.liveReadinessWaiters.add(check)
         return () => this.liveReadinessWaiters.delete(check)
+      },
+      // Read at send time, not at call time, and never fatal: a store that
+      // cannot answer costs us the selection, which is the behavior we had
+      // before we read it at all. It must not cost the user the prompt.
+      selection: () => {
+        try {
+          return this.store?.readSessionInfo(this.launch.sessionID)?.selection
+            ?? { agent: null, providerID: null, modelID: null, variant: null }
+        } catch {
+          return { agent: null, providerID: null, modelID: null, variant: null }
+        }
       },
     })
   }

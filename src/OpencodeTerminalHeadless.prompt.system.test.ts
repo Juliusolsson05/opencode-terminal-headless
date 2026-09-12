@@ -5,23 +5,69 @@ import { loadLiveFixture } from './testing/fixtures.js'
 import { waitUntil } from './testing/replay.js'
 
 // The server's recorded request is the oracle, not a client-side builder.
-// Installed 1.18.30's prompt_async path owns sessionID; the body contains only
-// text parts, and a bodyless 204 acknowledges acceptance.
+// Installed 1.18.30's prompt_async path owns sessionID in the URL; the body
+// carries the text parts AND the session's agent/model/variant, and a bodyless
+// 204 acknowledges acceptance.
 const { rig } = useReplayRigs()
 const recording = loadLiveFixture('plain.json')
 const promptPath = `/session/${recording.sessionID}/prompt_async`
 
 describe('OpencodeTerminalHeadless.submitPrompt', () => {
-  it('posts exactly the text parts to the bound session, keeps model/agent selection upstream, and never pastes', async () => {
-    const r = await rig(recording)
+  it('carries the session\u2019s own agent, model and variant, and never pastes', async () => {
+    // WHY a non-default agent is the only honest fixture here: omitting `agent`
+    // makes 1.18.30 resolve `Agent.defaultInfo()` — normally `build` — and then
+    // PERSIST it over the user's choice via `Session.setAgentModel`. A session
+    // already on `build` would pass whether or not we sent anything, so it
+    // could never have caught this. One of our own recorded sessions
+    // (ses_f963831c3ffe…) really is on `general`, which is what this imitates.
+    const r = await rig(recording, {
+      sessionRow: {
+        agent: 'plan',
+        model: JSON.stringify({ id: 'claude-sonnet-4-5', providerID: 'anthropic', variant: 'high' }),
+      },
+    })
     await startConnected(r)
     const text = 'Explain this repository.\nKeep the 项目 name and %20 literal.'
     expect(await r.headless.submitPrompt(text)).toEqual({ ok: true })
     expect(r.server.calls.filter(call => call.method === 'POST')).toEqual([{
       method: 'POST', path: promptPath,
-      body: JSON.stringify({ parts: [{ type: 'text', text }] }), authorized: true,
+      body: JSON.stringify({
+        parts: [{ type: 'text', text }],
+        agent: 'plan',
+        model: { providerID: 'anthropic', modelID: 'claude-sonnet-4-5' },
+        variant: 'high',
+      }),
+      authorized: true,
     }])
     expect(r.pty.writes).toEqual([])
+  })
+
+  it('omits what the session never chose, and never forwards the "default" variant sentinel', async () => {
+    // `setAgentModel` writes `variant ?? "default"`, so "default" means "no
+    // variant". Forwarding it literally would pin the turn to a variant by
+    // that name and suppress the agent's configured one — the same class of
+    // silent override this whole fix exists to prevent, one level down.
+    const r = await rig(recording, {
+      sessionRow: { agent: null, model: JSON.stringify({ id: 'gpt-5', providerID: 'openai', variant: 'default' }) },
+    })
+    await startConnected(r)
+    expect(await r.headless.submitPrompt('hello')).toEqual({ ok: true })
+    expect(JSON.parse(r.server.calls.find(call => call.method === 'POST')!.body!)).toEqual({
+      parts: [{ type: 'text', text: 'hello' }],
+      model: { providerID: 'openai', modelID: 'gpt-5' },
+    })
+  })
+
+  it('still delivers when the session row records no selection at all', async () => {
+    // A brand-new session has chosen nothing, and the server's default IS the
+    // right answer then. Reading the selection must not make delivery
+    // conditional on having one.
+    const r = await rig(recording, { sessionRow: { agent: null, model: null } })
+    await startConnected(r)
+    expect(await r.headless.submitPrompt('hello')).toEqual({ ok: true })
+    expect(JSON.parse(r.server.calls.find(call => call.method === 'POST')!.body!)).toEqual({
+      parts: [{ type: 'text', text: 'hello' }],
+    })
   })
 
   it('waits through a booting server and then a held re-sync before delivering', async () => {
@@ -88,7 +134,13 @@ describe('OpencodeTerminalHeadless.submitPrompt', () => {
     expect(r.pty.writes).toEqual([])
   })
 
-  it('reports a connection lost during POST as unreachable, without submitting a second time', async () => {
+  // The next two cases are the reason `unknown` exists as a separate reason.
+  // Both wait for `held.arrived`, so the server HAS the prompt body; 1.18.30's
+  // route forks the prompt work before it answers, so a lost or absent
+  // acknowledgement cannot distinguish "never ran" from "already running".
+  // Calling either one `unreachable` told the host it was safe to retry, which
+  // is how a user's prompt could be submitted twice.
+  it('reports a connection lost after the server received the POST as unknown, without submitting a second time', async () => {
     const r = await rig(recording)
     await startConnected(r)
     const held = r.server.holdNext(promptPath)
@@ -96,7 +148,7 @@ describe('OpencodeTerminalHeadless.submitPrompt', () => {
     try {
       await held.arrived
       await r.server.close()
-      expect(await delivery).toMatchObject({ ok: false, reason: 'unreachable' })
+      expect(await delivery).toMatchObject({ ok: false, reason: 'unknown' })
       expect(r.server.calls.filter(call => call.path === promptPath)).toHaveLength(1)
       expect(r.pty.writes).toEqual([])
     } finally {
@@ -105,14 +157,14 @@ describe('OpencodeTerminalHeadless.submitPrompt', () => {
     }
   })
 
-  it('bounds an accepted connection whose POST never answers by the same prompt deadline', async () => {
+  it('bounds a POST that never answers by the prompt deadline, and reports it as unknown', async () => {
     const r = await rig(recording)
     await startConnected(r)
     const held = r.server.holdNext(promptPath)
     const delivery = r.headless.submitPrompt('hung acknowledgement', { timeoutMs: 80 })
     try {
       await held.arrived
-      expect(await delivery).toMatchObject({ ok: false, reason: 'unreachable' })
+      expect(await delivery).toMatchObject({ ok: false, reason: 'unknown' })
     } finally {
       held.release()
       await delivery

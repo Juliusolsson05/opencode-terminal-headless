@@ -99,12 +99,31 @@ await headless.resolveConditionAction(action)           // answer a permission /
 The class also exposes `semantic`, `screen` and `committed` channels in the
 sibling packages' shape, plus `getActivity()`, `getConditionSnapshot()` and
 `getProviderSessionId()`. `submitPrompt(text, { timeoutMs? })` uses the bound
-session's `/prompt_async` endpoint, preserving OpenCode's agent/model selection.
-It waits up to the connect deadline (30 seconds by default), including the
-request, and returns `{ ok: true }` on HTTP acceptance or `{ ok: false, reason,
-detail? }` with `no-live-channel`, `unreachable`, or `rejected`. `rejected`
-includes the HTTP status in `detail`. It never pastes or retries a POST;
-`pasteAndSubmit` remains available for host terminal-composer interactions.
+session's `/prompt_async` endpoint. It waits up to the connect deadline (30
+seconds by default), including the request.
+
+It sends the session's own `agent`, `model` and `variant`, read from the session
+row OpenCode itself writes. **Omitting them would not preserve the user's
+choice** — 1.18.30 resolves an absent `agent` to `Agent.defaultInfo()`, the
+configured default, and then persists that over the session's selection, so a
+prompt sent by a host would move a `plan` session to `build` and drop its model
+variant. The known limit: the row records the selection last *used*, so a choice
+changed in the TUI but not yet prompted with is not visible to us.
+
+The result is `{ ok: true }` on HTTP acceptance, or `{ ok: false, reason, detail? }`:
+
+| reason | meaning | safe to resend? |
+|---|---|---|
+| `no-live-channel` | never started, or stopped; no request existed | yes |
+| `unreachable` | the request was never dispatched | yes |
+| `unknown` | the POST was dispatched and its fate is unknown | **no** |
+| `rejected` | the server answered non-2xx (status in `detail`) | no |
+
+`unknown` is not a hedge. The route forks the prompt work before it
+acknowledges, so a lost response can follow a prompt that is already running;
+treating that as "did not happen" is how a caller submits a user's work twice.
+It never pastes and never retries a POST itself; `pasteAndSubmit` remains
+available for host terminal-composer interactions.
 `getLiveProgress()` exposes connection and re-sync progress for diagnostics
 and test synchronization.
 
@@ -179,9 +198,10 @@ OPENCODE_TERMINAL_HEADLESS_LIVE=1 NODE_PTY_PATH=… npm run test:live   # the re
   - Regenerate with
     `npm run census -- --db <opencode.db> --extract … --recorded-with <version>`
     and `npm run probe:live`. `--recorded-with` is required: a fixture's
-    `meta.recordedWith` must name the OpenCode build that actually wrote those
-    rows, and no reliable version marker exists inside the database itself.
-    Guessing it would quietly invalidate every upstream-drift comparison.
+    `meta.recordedWith` names the OpenCode CLI release **observed at capture** —
+    not a guarantee about the build that wrote every historical row, which a
+    database cannot tell us. No reliable version marker exists inside the file,
+    so guessing it would quietly invalidate every upstream-drift comparison.
 - **No oracle is the reader.** Durable tests check against OpenCode's own
   projection. Live tests check against each recording's own status events.
 - **Replay harness.** `src/testing/` re-enacts recordings over a real socket
