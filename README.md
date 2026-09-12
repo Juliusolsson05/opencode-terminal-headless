@@ -137,6 +137,14 @@ root sessions only, because a task child is an implementation detail of its
 parent's turn and is not something a user can resume. Omitting `directory`
 lists every project, which is what a global "recent sessions" control needs.
 
+**No consumer uses `listSessions` today.** It was built for Agent Code's Resume
+picker (agent-code#773); before it shipped, Agent Code grew a conversation
+catalog that reads `opencode.db` itself and serves every picker from one place.
+It is kept rather than deleted because that catalog and this store now both
+open the same database, and consolidating on this one is the obvious way to
+end that — see agent-code#910. If that consolidation is rejected, delete this
+method instead of letting it sit here unused.
+
 OpenCode has no transcript file, so where file-backed providers publish a JSONL
 path this package publishes `opencode://session/<id>`
 (`getTranscriptFile()`). `parseOpencodeTranscriptFile(locator)` returns the
