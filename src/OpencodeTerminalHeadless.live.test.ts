@@ -146,4 +146,88 @@ describe('OpencodeTerminalHeadless against the real OpenCode TUI', () => {
       expect(order.indexOf('activity:false', completedAt)).toBeGreaterThan(completedAt)
     },
   )
+
+  it.skipIf(!enabled || !existsSync(binary))(
+    'jumpToLatest scrolls a paged-up transcript back to the newest message (Agent Code #843; needs OPENCODE_TERMINAL_HEADLESS_LIVE=1)',
+    async () => {
+      // WHY live: /tui/execute-command answers 200 for ANY command, and a
+      // probe showed `session.last` accepted and ignored while the legacy
+      // `messages_last` scrolls. Only the real TUI can tell them apart.
+      const root = mkdtempSync(join(tmpdir(), 'oth-live-jump-'))
+      cleanup.push(() => rmSync(root, { recursive: true, force: true }))
+      const home = join(root, 'home')
+      const project = join(root, 'project')
+      await execFileAsync('mkdir', ['-p', home, project])
+      const env: Record<string, string> = {
+        PATH: `${dirname(binary)}:/usr/bin:/bin:/usr/sbin:/sbin`,
+        HOME: home,
+        XDG_DATA_HOME: join(home, '.local/share'),
+        XDG_CONFIG_HOME: join(home, '.config'),
+        XDG_STATE_HOME: join(home, '.local/state'),
+        XDG_CACHE_HOME: join(home, '.cache'),
+        TERM: 'xterm-256color',
+        LANG: 'en_US.UTF-8',
+        OPENCODE_DISABLE_AUTOUPDATE: '1',
+      }
+      // A session long enough to page: 40 question/answer pairs, in the
+      // export shape `opencode import` accepts (the one Agent Code writes).
+      const sessionID = `ses_${randomUUID().replaceAll('-', '')}`
+      const now = Date.now()
+      const model = { providerID: 'opencode', modelID: 'big-pickle' }
+      const messages = Array.from({ length: 40 }, (_, index) => {
+        const userID = `msg_${randomUUID().replaceAll('-', '')}`
+        const assistantID = `msg_${randomUUID().replaceAll('-', '')}`
+        const at = now + index * 2000
+        const part = (messageID: string, text: string) => ({ type: 'text', text, id: `prt_${randomUUID().replaceAll('-', '')}`, sessionID, messageID })
+        return [
+          { info: { id: userID, sessionID, role: 'user', time: { created: at }, agent: 'build', model }, parts: [part(userID, `question number ${index}`)] },
+          { info: { id: assistantID, sessionID, parentID: userID, role: 'assistant', mode: 'build', agent: 'build', path: { cwd: project, root: project }, cost: 0, tokens: { total: 0, input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, ...{ modelID: model.modelID, providerID: model.providerID }, time: { created: at, completed: at }, finish: 'stop' }, parts: [part(assistantID, `ANSWER-${index} ` + 'lorem ipsum dolor sit amet '.repeat(6))] },
+        ]
+      }).flat()
+      const seed = join(root, 'seed.json')
+      writeFileSync(seed, JSON.stringify({ info: { id: sessionID, slug: 'jump', projectID: 'jump', directory: project, path: '', title: 'jump', version: '0.0.0-live', time: { created: now, updated: now } }, messages }))
+      await execFileAsync(binary, ['import', seed], { cwd: project, env })
+
+      const launch = await prepareOpencodeTerminalLaunch({ binary, cwd: project, env, sessionID, dangerousMode: false })
+      const ptyModule = createRequire(import.meta.url)(process.env.NODE_PTY_PATH ?? 'node-pty') as PtyModule
+      const pty = ptyModule.spawn(launch.binary, launch.args, { name: 'xterm-256color', cols: 120, rows: 36, cwd: project, env: launch.env })
+      let output = ''
+      pty.onData(data => { output += data })
+      cleanup.push(async () => {
+        try { pty.kill() } catch { /* already gone */ }
+        await settle(300)
+      })
+      const headless = new OpencodeTerminalHeadless({ pty, cwd: project, launch })
+      cleanup.push(() => headless.stop())
+      let connected = false
+      headless.on('live-state', state => { if (state.connected) connected = true })
+      await headless.start()
+      await waitUntil(() => connected && output.includes('ANSWER-39'), 120_000, 'TUI at the bottom of the session')
+      await settle(1_000)
+
+      // OpenTUI repaints only CHANGED cells, so "ANSWER-39" replacing
+      // "ANSWER-28" arrives as just "39". A resize forces a full repaint, and
+      // a full repaint prints every visible line whole: that is how this reads
+      // what is on screen without a terminal emulator in the package.
+      let width = 120
+      const visibleAfterFullRepaint = async () => {
+        width = width === 120 ? 121 : 120
+        output = ''
+        pty.resize(width, 36)
+        await settle(1_500)
+        return output
+      }
+      // Page up until the newest answer is off screen. This is the control:
+      // without it, a jump that did nothing would still pass.
+      for (let press = 0; press < 8; press += 1) { pty.write('\x1b[5~'); await settle(200) }
+      await settle(1_000)
+      expect(await visibleAfterFullRepaint()).not.toContain('ANSWER-39')
+
+      expect(await headless.jumpToLatest()).toEqual({ ok: true })
+      await settle(1_000)
+      expect(await visibleAfterFullRepaint()).toContain('ANSWER-39')
+    },
+    240_000,
+  )
 })
+

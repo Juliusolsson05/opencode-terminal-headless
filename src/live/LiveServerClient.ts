@@ -133,6 +133,30 @@ export class LiveServerClient {
     await this.request('POST', `/permission/${encodeURIComponent(requestID)}/reply`, { reply })
   }
 
+  /**
+   * Scroll the TUI's transcript to its newest message.
+   *
+   * WHY the server command and not a keystroke (Agent Code #843): OpenCode's
+   * TUI runs on the alternate screen and pages its transcript inside its own
+   * scrollbox, so a terminal scrollToBottom can never move it. Its own chord
+   * (Ctrl+Alt+G for messages_last) was tried and reverted, because keybinds
+   * are user-configurable: a supported config can put messages_undo, which
+   * aborts and reverts the session, on that chord. POST /tui/execute-command
+   * dispatches the command below the keybind layer.
+   *
+   * WHY `messages_last` and not `session.last`: the route translates the
+   * LEGACY command names through its alias table (`messages_last` maps to
+   * `session.last` in the 1.18.31 binary). Probed against the real TUI on a
+   * 40-exchange session scrolled up with PageUp: `messages_last` brought the
+   * newest answers back on screen, while `session.last` answered 200 and
+   * changed nothing. The route answers 200 for ANY string, so acceptance
+   * cannot tell the two apart. Only the live test in
+   * OpencodeTerminalHeadless.live.test.ts can.
+   */
+  async jumpToLatest(): Promise<void> {
+    await this.request('POST', '/tui/execute-command', { command: 'messages_last' }, { acceptanceOnly: true })
+  }
+
   async rejectQuestion(questionID: string): Promise<void> {
     await this.request('POST', `/question/${encodeURIComponent(questionID)}/reject`, {})
   }
