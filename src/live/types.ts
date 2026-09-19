@@ -33,7 +33,7 @@ export type LiveOutput =
   | { kind: 'phase'; phase: StreamPhase; turnId: string | null; toolName?: string }
   | { kind: 'requests'; permission: PendingPermission | null; question: PendingQuestion | null }
   | { kind: 'durable-hint' }
-  | { kind: 'api-error'; message: string; turnId: string | null }
+  | { kind: 'api-error'; message: string; turnId: string | null; errorType?: string }
   // The TUI started driving a different root session (see
   // LiveStateProjector.observeUserMessage). Detection only: it changes no
   // turn, request or durable state, so the composition hands it straight to

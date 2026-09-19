@@ -75,7 +75,7 @@ function harness(opts: { settleDeadlineMs?: number; settleRecheckMs?: number; th
         if (opts.throwingSink === 'entry') throw new Error(`host listener threw on ${r.info.id}`)
         log.push({ what: 'entry', detail: r.info.id })
       },
-      semantic: e => log.push({ what: e.type, detail: e.type === 'stream_phase' ? e.phase : e.type === 'turn_completed' ? e.fullText : e.type === 'turn_started' ? e.turnId : undefined }),
+      semantic: e => log.push({ what: e.type, detail: e.type === 'stream_phase' ? e.phase : e.type === 'turn_completed' ? e.fullText : e.type === 'turn_started' ? e.turnId : e.type === 'api_error' ? e.errorType : undefined }),
       activity: a => log.push({ what: 'activity', detail: String(a.active) }),
       requests: () => log.push({ what: 'requests' }),
     },
@@ -113,6 +113,14 @@ const seenAfter = (log: Logged[], what: string, detail: string) => {
   const at = shown.findIndex(entry => entry.what === what && entry.detail === detail)
   return at < 0 ? null : shown.slice(at + 1).map(entry => entry.what)
 }
+
+describe('SessionSequencer api errors', () => {
+  it('passes the error name through, so a consumer can tell a user abort from a provider failure (Agent Code #1018)', () => {
+    const { log, sequencer } = harness()
+    sequencer.onLiveOutputs([{ kind: 'api-error', message: 'Aborted', turnId: null, errorType: 'MessageAbortedError' }])
+    expect(seen(log)).toContainEqual({ what: 'api_error', detail: 'MessageAbortedError' })
+  })
+})
 
 describe('SessionSequencer over recorded turns', () => {
   for (const name of listLiveFixtures().filter(n => n !== 'port-conflict.json')) {
