@@ -65,16 +65,25 @@ describe('session.error (sst/opencode@v1.18.30 packages/opencode/src/session/pro
     const projector = new LiveStateProjector(A, { now: () => 1 })
     const [start] = projector.apply(status(A, 'busy')) as Array<Extract<LiveOutput, { kind: 'turn-start' }>>
     const outputs = projector.apply(sessionError(A, { name: 'APIError', data: { message: 'rate limited', statusCode: 429, isRetryable: false } }))
-    expect(outputs).toEqual([{ kind: 'api-error', message: 'rate limited', turnId: start!.turnId }])
+    expect(outputs).toEqual([{ kind: 'api-error', message: 'rate limited', turnId: start!.turnId, errorType: 'APIError' }])
   })
 
   it('falls back to error.message, then to the error name, as the binary formats errors', () => {
     const projector = new LiveStateProjector(A)
     expect(projector.apply(sessionError(A, { message: 'plain message' }))).toEqual([{ kind: 'api-error', message: 'plain message', turnId: null }])
     // MessageOutputLengthError carries `data: {}`: its name is all there is.
-    expect(projector.apply(sessionError(A, { name: 'MessageOutputLengthError', data: {} }))).toEqual([{ kind: 'api-error', message: 'MessageOutputLengthError', turnId: null }])
+    expect(projector.apply(sessionError(A, { name: 'MessageOutputLengthError', data: {} }))).toEqual([{ kind: 'api-error', message: 'MessageOutputLengthError', turnId: null, errorType: 'MessageOutputLengthError' }])
     // Nothing usable at all still reports an error rather than dropping it.
     expect(projector.apply(sessionError(A, {}))).toEqual([{ kind: 'api-error', message: 'OpenCode session error', turnId: null }])
+  })
+
+  it('names a user abort MessageAbortedError, from the recorded database row (Agent Code #1018 catalog case b)', () => {
+    // OpenCode 1.18.31 wrote this error on the assistant row when the user
+    // pressed Esc mid-turn; session.error carries the same object. It is an
+    // interruption, and the name is how a consumer knows that.
+    const projector = new LiveStateProjector(A)
+    expect(projector.apply(sessionError(A, { name: 'MessageAbortedError', data: { message: 'Aborted' } })))
+      .toEqual([{ kind: 'api-error', message: 'Aborted', turnId: null, errorType: 'MessageAbortedError' }])
   })
 
   it('does not end the turn itself; the idle that the processor publishes next does', () => {

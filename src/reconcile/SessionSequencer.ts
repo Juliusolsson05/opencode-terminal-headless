@@ -251,7 +251,7 @@ export class SessionSequencer {
         this.call(() => this.options.sink.requests({ permission: output.permission, question: output.question }))
         return
       case 'api-error':
-        this.call(() => this.options.sink.semantic({ type: 'api_error', turnId: output.turnId, message: output.message, source: 'opencode-sse', ts }))
+        this.call(() => this.options.sink.semantic({ type: 'api_error', turnId: output.turnId, message: output.message, ...(output.errorType ? { errorType: output.errorType } : {}), source: 'opencode-sse', ts }))
         return
     }
   }

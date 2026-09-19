@@ -182,8 +182,15 @@ export class LiveStateProjector {
       case 'session.idle':
         this.stampStatus()
         return this.endTurn()
-      case 'session.error':
-        return [{ kind: 'api-error', message: errorMessage(obj(props.error)), turnId: this.turnId }]
+      case 'session.error': {
+        // The name travels beside the message so a user's Esc
+        // (MessageAbortedError) is distinguishable from a provider failure.
+        // Session-less instance errors never get here: the session check
+        // above drops them.
+        const error = obj(props.error)
+        const errorType = str(error.name)
+        return [{ kind: 'api-error', message: errorMessage(error), turnId: this.turnId, ...(errorType ? { errorType } : {}) }]
+      }
       case 'message.updated': {
         const info = obj(props.info)
         const id = str(info.id)

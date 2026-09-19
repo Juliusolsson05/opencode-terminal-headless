@@ -42,6 +42,13 @@ export type SemanticApiErrorEvent = {
   type: 'api_error'
   turnId: string | null
   message: string
+  /**
+   * OpenCode's own error name ('APIError', 'MessageAbortedError', …) when it
+   * sent one. It lets a consumer tell a provider failure from a user's Esc
+   * without parsing the message (Agent Code #1018 review). The structured
+   * package, opencode-headless, sends the same field.
+   */
+  errorType?: string
   source: SemanticSource
   ts: number
 }
