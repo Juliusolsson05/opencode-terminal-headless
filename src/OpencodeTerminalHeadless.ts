@@ -373,6 +373,23 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   }
 
   /**
+   * Scroll the TUI to its newest message through its own server (see
+   * LiveServerClient.jumpToLatest for why a keystroke cannot do this safely).
+   * Never throws: a jump that could not be sent is reported, and the pane
+   * stays where it was.
+   */
+  async jumpToLatest(): Promise<{ ok: true } | { ok: false; reason: 'no-live-channel' | 'request-failed'; message?: string }> {
+    const client = this.client
+    if (!client || this.stopped || this.exited) return { ok: false, reason: 'no-live-channel' }
+    try {
+      await client.jumpToLatest()
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: 'request-failed', message: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /**
    * Answer a permission or reject a question through the TUI's server. Clears
    * the condition as soon as the server accepts, instead of waiting for the
    * `*.replied` event, so the badge disappears the moment the user acts.
