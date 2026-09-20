@@ -52,25 +52,38 @@ afterEach(() => {
   sequencer?.dispose()
   reader?.stop()
   store?.release()
+  // A test that takes a real lock releases it on a timer; unlock again so an
+  // early failure inside the window cannot leave the file locked at close().
+  try { writer?.unlock() } catch { /* not locked */ }
   writer?.close()
   rmSync(dir, { recursive: true, force: true })
 })
 
-function setUp(opts: { refuseReads?: () => boolean } = {}) {
+function setUp(opts: { refuseReads?: () => boolean; journal?: 'wal' | 'delete'; afterRead?: () => void } = {}) {
   const file = join(dir, 'opencode.db')
   writer = new LiveFixtureWriter(file, S, sessionRowFor(S))
+  // Journal mode is a property of the FILE, and switching it needs the only
+  // connection, so it has to happen before the store under test opens it.
+  // `delete` is what a test that takes a REAL `BEGIN EXCLUSIVE` needs: in WAL
+  // a writer never refuses a reader that is already connected.
+  if (opts.journal) writer.setJournalMode(opts.journal)
   const real = openOpencodeStore(file)
   store = real
   // A store whose reads are refused while `refuseReads()` says so: the
   // deterministic stand-in for SQLITE_BUSY (the translation of a real lock is
   // proven in OpencodeStore.system.test.ts and DurableReader.faults).
-  const used: OpencodeStore = opts.refuseReads
+  // `afterRead` fires once each read transaction has COMMITTED, which is the
+  // only way to place an event in the gap BETWEEN two of the exit drain's
+  // transactions.
+  const used: OpencodeStore = opts.refuseReads || opts.afterRead
     ? new Proxy(real, {
         get(target, key) {
           if (key === 'read') {
             return (fn: unknown) => {
-              if (opts.refuseReads!()) throw new OpencodeStoreError('busy', 'OpenCode store read: database busy')
-              return target.read(fn as never)
+              if (opts.refuseReads?.()) throw new OpencodeStoreError('busy', 'OpenCode store read: database busy')
+              const value = target.read(fn as never)
+              opts.afterRead?.()
+              return value
             }
           }
           const value = Reflect.get(target, key) as unknown
@@ -207,6 +220,53 @@ describe('SessionSequencer with the real reader over a real file', () => {
     expect(outcomes).toEqual([{ complete: true }])
     expect(errors).toEqual([])
     expect(order.slice(order.indexOf('entry:msg_u'))).toEqual(['entry:msg_u', 'entry:msg_a', 'turn_completed(answer)', 'phase:idle', 'activity:false'])
+  })
+
+  it('exit with a REAL lock taken between the drain and the pending-user flush: the prompt is still committed', async () => {
+    // #910 item 1, reproduced the way the verifier did: a real `BEGIN
+    // EXCLUSIVE` in the gap between the exit drain's transaction and the
+    // pending-user flush's, not a thrown stand-in. The retry loop used to
+    // watch only the drain, so this closed the session at once, and the host
+    // tears the reader down in that callback — the owed flush never ran and
+    // the user's last prompt was gone.
+    let armLock = false
+    const { order, errors, bus, row, projector, sequencer: seq } = setUp({
+      journal: 'delete',
+      afterRead: () => {
+        if (!armLock) return
+        armLock = false
+        writer!.lock()
+        // Released on the next macrotask: the attempt running now meets the
+        // lock, every retry after it does not. So a loop that retries at all
+        // recovers, and one that does not cannot.
+        setTimeout(() => writer!.unlock(), 0)
+      },
+    })
+    // An answered turn (drained and delivered normally) followed by a prompt
+    // with no answer, which the assembler holds pending until the flush.
+    row('message.updated.1', { sessionID: S, info: user })
+    row('message.part.updated.1', { sessionID: S, time: T, part: userPart })
+    row('message.updated.1', { sessionID: S, info: assistant('msg_a', 'msg_u', { time: { created: T + 1, completed: T + 5 }, finish: 'stop' }) })
+    row('message.part.updated.1', { sessionID: S, time: T + 2, part: textPart('msg_a', 'answer') })
+    const user2 = { ...user, id: 'msg_u2', time: { created: T + 100 } }
+    row('message.updated.1', { sessionID: S, info: user2 })
+    row('message.part.updated.1', { sessionID: S, time: T + 100, part: { ...userPart, id: 'prt_u2', messageID: 'msg_u2' } })
+    bus('session.status', { sessionID: S, status: { type: 'busy' } })
+
+    const outcomes: SequencerExitOutcome[] = []
+    armLock = true
+    seq.onExit(projector.endForExit(), outcome => outcomes.push(outcome))
+    // Positive control for where the lock landed: the drain itself got
+    // through, synchronously, before the lock existed. Had the lock landed
+    // earlier the drain would have deferred, and the old loop — which watched
+    // exactly that — would have covered the case, proving nothing.
+    expect(order).toContain('entry:msg_a')
+    expect(outcomes).toEqual([])
+
+    await waitUntil(() => outcomes.length > 0, SETTLE_DEADLINE_MS + 2000, 'the exit drain to finish')
+    expect(outcomes).toEqual([{ complete: true }])
+    expect(order).toContain('entry:msg_u2')
+    expect(errors).toEqual([])
   })
 
   it('exit with a database that stays busy: reports the drain incomplete at the deadline instead of dropping records in silence', async () => {

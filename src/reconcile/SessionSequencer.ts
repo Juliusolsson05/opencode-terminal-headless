@@ -44,6 +44,13 @@
 // then held assistants are handed over, pending prompts flushed, and the open
 // turn closed. If the drain never finished, the caller is told so it can
 // report it instead of silently dropping records (`final_drain_incomplete`).
+// All THREE of those transactions share that one retry window, and each is
+// retried only while it is the one still deferring (#910 item 1): the drain
+// alone used to own the loop, so a lock taken between it and the pending-user
+// flush closed the session immediately — and the host tears the reader down in
+// that callback, which cancelled the owed flush and lost the user's last
+// prompt. The outcome's `detail` names the step that was actually stuck and
+// the time actually spent waiting, never a deadline that was not reached.
 //
 // Sinks are isolated: one that throws cannot stop the turn from closing for
 // the others (R1-F4). The error goes to `onSinkError`.
@@ -114,6 +121,22 @@ const SETTLE_DEADLINE_MS = 2_000
 // whole deadline cost nothing, and 25 ms keeps the added latency invisible.
 const SETTLE_RECHECK_MS = 25
 
+// What the exit drain was still waiting on, and what the user loses for it.
+// WHY name the step rather than say "the log was unreadable": the three
+// transactions fail independently, and a diagnostic that blames the drain when
+// the drain in fact got through sends the next investigator after the wrong
+// one. A fabricated diagnostic is worse than none.
+type ExitStep = 'drain' | 'settle' | 'flush'
+const EXIT_STEPS: Record<ExitStep, string> = {
+  drain: 'reading committed messages (they may be missing from the stream)',
+  settle: 'handing over an assistant that never completed (its answer may be missing from the stream)',
+  flush: 'committing a prompt that was still pending (that prompt may be missing from the stream)',
+}
+
+function exitDetail(stuck: readonly ExitStep[], waitedMs: number): string {
+  return `the durable log was still busy ${waitedMs} ms after the TUI exited, on: ${stuck.map(step => EXIT_STEPS[step]).join('; ')}. The session's history on disk still has every committed row.`
+}
+
 function textOf(record: OpencodeMessageRecord): string {
   return record.parts
     .filter(part => part.type === 'text' && typeof part.text === 'string')
@@ -173,21 +196,60 @@ export class SessionSequencer {
     if (this.exited) return
     this.exited = true
     this.clearSettleTimers()
+    const startedAt = this.now()
+    // The settle is the irreversible half: it abandons open assistants and
+    // hands over held ones. Once it has succeeded there is nothing left for it
+    // to do, and re-running it would report no open assistant on the second
+    // pass and silently drop the degraded text. Same for the flush: a
+    // committed prompt is committed. So each is retried only while it is the
+    // one still deferring.
+    let settleDone = false
+    let flushDone = false
+    let degradedText = ''
     const attempt = (final: boolean): boolean => {
       const durable = this.options.durable()
       const drain = durable ? durable.drainNow() : null
-      if (drain?.status === 'deferred' && !final) return false
-      let complete = drain?.status !== 'deferred'
-      let degradedText = ''
+      const drainDeferred = drain?.status === 'deferred'
+      // Nothing else may run yet: the settle would stop the wait we are still
+      // willing to wait out. Against today's DurableReader this guard is an
+      // EQUIVALENT MUTANT and no test can kill it — a settle that would lose
+      // something has to SELECT the assistant, so the same lock that deferred
+      // the drain defers it too, and one that has nothing to lose abandons an
+      // empty set. It stays because that is a property of the reader, not of
+      // this loop: if a settle ever becomes readable while a drain is not,
+      // exiting without it is the bug, and this line is what prevents it.
+      if (drainDeferred && !final) return false
+      const stuck: ExitStep[] = drainDeferred ? ['drain'] : []
+      // A `failed` channel is terminal — the reader has already reported the
+      // error through onError and will never read again — so only `deferred`
+      // (the database was BUSY) is worth another pass.
       if (durable && drain?.status !== 'failed') {
-        const settled = durable.settleOpenWork()
-        const flush = durable.flushPendingUsers()
-        if (settled.status === 'deferred' || flush.status === 'deferred') complete = false
-        if (settled.openAssistant) degradedText = textOf(settled.openAssistant)
+        if (!settleDone) {
+          const settled = durable.settleOpenWork()
+          if (settled.status === 'deferred') stuck.push('settle')
+          else {
+            settleDone = true
+            if (settled.openAssistant) degradedText = textOf(settled.openAssistant)
+          }
+        }
+        if (!flushDone) {
+          const flush = durable.flushPendingUsers()
+          if (flush.status === 'deferred') stuck.push('flush')
+          else flushDone = true
+        }
       }
+      // WHY every step shares the one retry window (#910 item 1): the exit
+      // drain is three separate transactions and the database can go BUSY
+      // between any two of them — OpenCode's own writer takes the lock while
+      // the TUI shuts down. Retrying only the first one meant a lock that
+      // landed after it closed the session at once; the host tears the reader
+      // down in this callback, so the owed flush never ran and the user's last
+      // prompt was lost. The bound is unchanged: a stuck database must never
+      // hold a session open forever.
+      if (stuck.length > 0 && !final) return false
       this.clearSettleTimers()
       this.closeForExit(closingOutputs, degradedText)
-      done(complete ? { complete: true } : { complete: false, detail: `the durable log stayed unreadable (database busy) for ${this.settleDeadlineMs} ms after the TUI exited; committed messages written before exit may be missing from the stream (history still has them)` })
+      done(stuck.length === 0 ? { complete: true } : { complete: false, detail: exitDetail(stuck, this.now() - startedAt) })
       return true
     }
     if (attempt(false)) return
