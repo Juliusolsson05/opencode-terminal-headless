@@ -44,6 +44,13 @@
 // then held assistants are handed over, pending prompts flushed, and the open
 // turn closed. If the drain never finished, the caller is told so it can
 // report it instead of silently dropping records (`final_drain_incomplete`).
+// All THREE of those transactions share that one retry window, and each is
+// retried only while it is the one still deferring (#910 item 1): the drain
+// alone used to own the loop, so a lock taken between it and the pending-user
+// flush closed the session immediately — and the host tears the reader down in
+// that callback, which cancelled the owed flush and lost the user's last
+// prompt. The outcome's `detail` names the step that was actually stuck and
+// the time actually spent waiting, never a deadline that was not reached.
 //
 // Sinks are isolated: one that throws cannot stop the turn from closing for
 // the others (R1-F4). The error goes to `onSinkError`.
@@ -114,6 +121,22 @@ const SETTLE_DEADLINE_MS = 2_000
 // whole deadline cost nothing, and 25 ms keeps the added latency invisible.
 const SETTLE_RECHECK_MS = 25
 
+// What the exit drain was still waiting on, and what the user loses for it.
+// WHY name the step rather than say "the log was unreadable": the three
+// transactions fail independently, and a diagnostic that blames the drain when
+// the drain in fact got through sends the next investigator after the wrong
+// one. A fabricated diagnostic is worse than none.
+type ExitStep = 'drain' | 'settle' | 'flush'
+const EXIT_STEPS: Record<ExitStep, string> = {
+  drain: 'reading committed messages (they may be missing from the stream)',
+  settle: 'handing over an assistant that never completed (its answer may be missing from the stream)',
+  flush: 'committing a prompt that was still pending (that prompt may be missing from the stream)',
+}
+
+function exitDetail(stuck: readonly ExitStep[], waitedMs: number): string {
+  return `the durable log was still busy ${waitedMs} ms after the TUI exited, on: ${stuck.map(step => EXIT_STEPS[step]).join('; ')}. The session's history on disk still has every committed row.`
+}
+
 function textOf(record: OpencodeMessageRecord): string {
   return record.parts
     .filter(part => part.type === 'text' && typeof part.text === 'string')
@@ -134,6 +157,9 @@ export class SessionSequencer {
   // The turn end that is waiting, and everything that arrived behind it.
   private settling: { turnId: string } | null = null
   private backlog: LiveOutput[] = []
+  // The open assistant's partial text, held for the turn end that closes the
+  // exit — and dropped the moment its own completion row arrives.
+  private exitDegraded: { id: string; text: string } | null = null
   private recheckTimer: ReturnType<typeof setInterval> | null = null
   private deadlineTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -150,6 +176,16 @@ export class SessionSequencer {
         const text = textOf(record)
         if (text) this.openTurn.lastAssistantText = text
       }
+      // The exit's degraded text is a PARTIAL read of an assistant that had
+      // not completed. If that very assistant's completion row then lands —
+      // the exit drain keeps running for the rest of the window, and
+      // OpenCode's cleanup can still be writing — the partial is no longer
+      // the newest text the user saw, it is the oldest. Dropping it here lets
+      // `completeTurn` fall back to `openTurn.lastAssistantText`, which this
+      // loop has just updated with the complete answer (#5 review, finding 2:
+      // orchestration reads `turn_completed.fullText`, so the alternative is
+      // reporting a child agent's answer truncated).
+      if (this.exitDegraded && record.info.id === this.exitDegraded.id) this.exitDegraded = null
       this.call(() => this.options.sink.entry(record))
     }
   }
@@ -173,21 +209,83 @@ export class SessionSequencer {
     if (this.exited) return
     this.exited = true
     this.clearSettleTimers()
+    const startedAt = this.now()
+    // The settle is the irreversible half: it abandons open assistants and
+    // hands over held ones. Once it has succeeded there is nothing left for it
+    // to do, and re-running it would report no open assistant on the second
+    // pass and silently drop the degraded text. Same for the flush: a
+    // committed prompt is committed. So each is retried only while it is the
+    // one still deferring.
+    //
+    // WHY three states and not a boolean (#5 review, finding 1): `pending`
+    // means the channel never got far enough to owe us anything, `owed` means
+    // a step deferred and has not since succeeded, `settled` means it will
+    // never run again. Rebuilding the stuck list from THIS attempt alone lost
+    // the middle one: a flush that deferred on attempt 1, followed by a drain
+    // that reported `failed` on attempt 2 (the reader's own retry can fail the
+    // channel mid-window), produced an empty list and reported
+    // `{complete: true}` — while the user's prompt was gone. A falsely clean
+    // exit is the exact failure mode #910 item 1 is about.
+    type StepState = 'pending' | 'owed' | 'settled'
+    let settleState: StepState = 'pending'
+    let flushState: StepState = 'pending'
     const attempt = (final: boolean): boolean => {
       const durable = this.options.durable()
       const drain = durable ? durable.drainNow() : null
-      if (drain?.status === 'deferred' && !final) return false
-      let complete = drain?.status !== 'deferred'
-      let degradedText = ''
+      const drainDeferred = drain?.status === 'deferred'
+      // Nothing else may run yet: the settle would stop the wait we are still
+      // willing to wait out.
+      //
+      // WHY this is NOT an equivalent mutant, as an earlier version of this
+      // comment claimed (#5 review, finding 3): `OpencodeStore.read` opens a
+      // DEFERRED transaction, so a settle or flush against an empty assembler
+      // issues no statement and never meets the lock — it reports `complete`
+      // and latches itself off for the rest of the window. Drop this line and
+      // a lock held across the first attempt makes both steps latch against
+      // nothing; the second attempt's drain then reads the prompt into the
+      // assembler, and neither step ever runs again. #910 item 1, recreated,
+      // and reported as a clean exit. There is a test.
+      if (drainDeferred && !final) return false
+      // A `failed` channel is terminal — the reader has already reported the
+      // error through onError and will never read again — so only `deferred`
+      // (the database was BUSY) is worth another pass.
       if (durable && drain?.status !== 'failed') {
-        const settled = durable.settleOpenWork()
-        const flush = durable.flushPendingUsers()
-        if (settled.status === 'deferred' || flush.status === 'deferred') complete = false
-        if (settled.openAssistant) degradedText = textOf(settled.openAssistant)
+        if (settleState !== 'settled') {
+          const settled = durable.settleOpenWork()
+          // `settleOpenWork` abandons open assistants whenever its READ
+          // succeeded, even on a path that then reports deferred, so the
+          // assistant it hands back is taken regardless of status — it is the
+          // only chance to see it (#5 review, finding 7).
+          if (settled.openAssistant) {
+            this.exitDegraded = { id: settled.openAssistant.info.id, text: textOf(settled.openAssistant) }
+          }
+          settleState = settled.status === 'deferred' ? 'owed' : 'settled'
+        }
+        if (flushState !== 'settled') {
+          flushState = durable.flushPendingUsers().status === 'deferred' ? 'owed' : 'settled'
+        }
       }
+      // WHY every step shares the one retry window (#910 item 1): the exit
+      // drain is three separate transactions and the database can go BUSY
+      // between any two of them — OpenCode's own writer takes the lock while
+      // the TUI shuts down. Retrying only the first one meant a lock that
+      // landed after it closed the session at once; the host tears the reader
+      // down in this callback, so the owed flush never ran and the user's last
+      // prompt was lost. The bound is unchanged: a stuck database must never
+      // hold a session open forever.
+      const stuck: ExitStep[] = []
+      if (drainDeferred) stuck.push('drain')
+      if (settleState === 'owed') stuck.push('settle')
+      if (flushState === 'owed') stuck.push('flush')
+      if (stuck.length > 0 && !final) return false
       this.clearSettleTimers()
-      this.closeForExit(closingOutputs, degradedText)
-      done(complete ? { complete: true } : { complete: false, detail: `the durable log stayed unreadable (database busy) for ${this.settleDeadlineMs} ms after the TUI exited; committed messages written before exit may be missing from the stream (history still has them)` })
+      const degraded = this.exitDegraded?.text ?? ''
+      this.exitDegraded = null
+      this.closeForExit(closingOutputs, degraded)
+      // Clamped: a deadline timer fires no earlier than its delay, but the
+      // clock behind it can step backwards (NTP), and "still busy -1500 ms" is
+      // the same genre of fabricated diagnostic this whole change removes.
+      done(stuck.length === 0 ? { complete: true } : { complete: false, detail: exitDetail(stuck, Math.max(0, this.now() - startedAt)) })
       return true
     }
     if (attempt(false)) return

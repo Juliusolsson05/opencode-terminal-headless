@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LiveStateProjector } from '../live/LiveStateProjector.js'
 import type { LiveOutput } from '../live/types.js'
 import { listLiveFixtures, loadLiveFixture } from '../testing/fixtures.js'
-import type { DrainResult } from '../transcript/DurableReader.js'
+import type { DrainResult, DrainStatus } from '../transcript/DurableReader.js'
 import type { OpencodeMessageRecord } from '../transcript/records.js'
 import { SessionSequencer, type SequencerDurable, type SequencerExitOutcome } from './SessionSequencer.js'
 
@@ -28,33 +28,51 @@ const record = (id: string, text = `answer ${id}`): OpencodeMessageRecord => ({
   parts: [{ id: `${id}_p`, messageID: id, sessionID: 'ses_x', type: 'text', text }],
 })
 
-function harness(opts: { settleDeadlineMs?: number; settleRecheckMs?: number; throwingSink?: 'entry'; onSinkError?: (error: unknown) => void } = {}) {
+// WHY the stub can be busy per OPERATION rather than as a whole: the exit
+// drain runs three transactions (drain, settle, flush) and the database can
+// go BUSY between any two of them — OpenCode's own writer takes the lock
+// while the TUI is shutting down. `setBusy(true)` still means all three, so
+// every older test reads the same; `setBusy({ flush: true })` is the window
+// #910 item 1 names, where the drain got through and the flush did not.
+type BusyOps = { drain: boolean; settle: boolean; flush: boolean }
+
+function harness(opts: { settleDeadlineMs?: number; settleRecheckMs?: number; throwingSink?: 'entry'; now?: () => number; onSinkError?: (error: unknown) => void } = {}) {
   const log: Logged[] = []
   let pending: OpencodeMessageRecord[] = []
   let held: OpencodeMessageRecord[] = []
-  let busy = false
+  let busy: BusyOps = { drain: false, settle: false, flush: false }
+  // A channel the reader has permanently failed (a non-busy read error). It
+  // has already reported through onError and will never read again.
+  let failed = false
+  let settleOverride: { status: DrainStatus; openAssistant?: OpencodeMessageRecord | null } | null = null
   let open: OpencodeMessageRecord | null = null
   let sequencer!: SessionSequencer
-  const result = (records: OpencodeMessageRecord[]): DrainResult => (busy ? { status: 'deferred', records: [] } : { status: 'complete', records })
+  const result = (records: OpencodeMessageRecord[], op: keyof BusyOps): DrainResult => (busy[op] ? { status: 'deferred', records: [] } : { status: 'complete', records })
   const durable: SequencerDurable = {
     ring: () => log.push({ what: 'ring' }),
     drainNow: () => {
       log.push({ what: 'drain' })
-      if (busy) return result([])
+      if (failed) return { status: 'failed', records: [] }
+      if (busy.drain) return result([], 'drain')
       const batch = pending
       pending = []
       sequencer.onDurableRecords(batch)
-      return result(batch)
+      return result(batch, 'drain')
     },
     flushPendingUsers: () => {
       log.push({ what: 'flush' })
-      return result([])
+      return result([], 'flush')
     },
     hasOpenAssistant: () => open !== null,
     hasHeldAssistants: () => held.length > 0,
     settleOpenWork: () => {
       log.push({ what: 'settle' })
-      if (busy) return { status: 'deferred', openAssistant: null }
+      // The real reader abandons open assistants whenever its READ succeeded,
+      // so it can hand one back on a path that still reports `deferred` (its
+      // delivery was refused). `settleOverride` stages that, and the terminal
+      // `failed` status, which no busy flag can express.
+      if (settleOverride) return { ...settleOverride, openAssistant: settleOverride.openAssistant ?? null }
+      if (busy.settle) return { status: 'deferred', openAssistant: null }
       const released = held
       held = []
       sequencer.onDurableRecords(released)
@@ -65,7 +83,7 @@ function harness(opts: { settleDeadlineMs?: number; settleRecheckMs?: number; th
   }
   sequencer = new SessionSequencer({
     durable: () => durable,
-    now: () => 1,
+    now: opts.now ?? (() => 1),
     heartbeatMs: 0,
     settleDeadlineMs: opts.settleDeadlineMs,
     settleRecheckMs: opts.settleRecheckMs,
@@ -86,8 +104,12 @@ function harness(opts: { settleDeadlineMs?: number; settleRecheckMs?: number; th
     whats: () => log.map(entry => entry.what),
     commitLater: (id: string) => pending.push(record(id)),
     holdLater: (id: string) => held.push(record(id)),
-    setBusy: (value: boolean) => { busy = value },
+    setBusy: (value: boolean | Partial<BusyOps>) => {
+      busy = typeof value === 'boolean' ? { drain: value, settle: value, flush: value } : { ...busy, ...value }
+    },
     setOpen: (value: OpencodeMessageRecord | null) => { open = value },
+    setFailed: (value: boolean) => { failed = value },
+    setSettleResult: (value: { status: DrainStatus; openAssistant?: OpencodeMessageRecord | null } | null) => { settleOverride = value },
   }
 }
 
@@ -322,6 +344,215 @@ describe('SessionSequencer contract', () => {
     // The turn still closes: the pane must not stay busy after its process died.
     expect(stuck.whats().slice(-3)).toEqual(TURN_END_TAIL)
     expect(stuck.sequencer.currentActivity().active).toBe(false)
+  })
+
+  it('on exit retries an operation that defers AFTER the drain, and reports what it actually waited on', () => {
+    vi.useFakeTimers()
+    // #910 item 1. The exit drain is three transactions, and the retry loop
+    // used to watch only the first: a database that went BUSY between the
+    // drain and the pending-user flush closed the session immediately,
+    // cancelled the owed flush (the host tears the reader down in this
+    // callback) and lost the user's last prompt — while reporting a 2 s wait
+    // that never happened.
+    const { log, sequencer, whats, setBusy, setOpen } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25 })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    // An assistant the TUI never completed: the settle is the only thing that
+    // reads its partial text, and it reads it once.
+    setOpen(record('msg_a', 'partial answer'))
+    setBusy({ flush: true })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    expect(outcomes).toEqual([])
+    vi.advanceTimersByTime(25)
+    expect(outcomes).toEqual([])
+    setBusy({ flush: false })
+    vi.advanceTimersByTime(25)
+    expect(outcomes).toEqual([{ complete: true }])
+    // The settle succeeded on the first attempt and is not repeated: it is
+    // the irreversible half (it abandons open assistants), so running it
+    // again on every retry would be both pointless and lossy — the second
+    // pass would find nothing open and blank the degraded text below.
+    expect(whats().filter(what => what === 'settle')).toHaveLength(1)
+    expect(whats().filter(what => what === 'flush')).toHaveLength(3)
+    // Read by the FIRST attempt, delivered by the turn end two retries later.
+    expect(log.find(entry => entry.what === 'turn_completed')?.detail).toBe('partial answer')
+
+    // A flush that never frees up: the deadline still closes the session, and
+    // the diagnostic names the step that was stuck and the time really spent.
+    // A fabricated one ("the log stayed unreadable for 200 ms") sends the next
+    // investigator after a drain that in fact got through.
+    // The clock is driven apart from the timers on purpose: a deadline timer
+    // fires no EARLIER than its delay and, on a blocked event loop, much
+    // later. The reported wait must be the time that really passed, which is
+    // also what tells this apart from printing the configured deadline back.
+    let clock = 0
+    const stuck = harness({ settleDeadlineMs: 200, settleRecheckMs: 25, now: () => clock })
+    stuck.sequencer.onLiveOutputs(turnStart('t1'))
+    stuck.setBusy({ flush: true })
+    const stuckOutcomes: SequencerExitOutcome[] = []
+    stuck.sequencer.onExit(turnEnd('t1'), outcome => stuckOutcomes.push(outcome))
+    vi.advanceTimersByTime(199)
+    expect(stuckOutcomes).toEqual([])
+    clock = 517
+    vi.advanceTimersByTime(1)
+    expect(stuckOutcomes).toHaveLength(1)
+    const detail = (stuckOutcomes[0] as { detail: string }).detail
+    expect(detail).toContain('busy')
+    expect(detail).toContain('517 ms')
+    expect(detail).not.toContain('200 ms')
+    expect(detail).toContain('prompt')
+    // The drain was never refused, so the diagnostic must not claim committed
+    // messages are missing.
+    expect(detail).not.toContain('committed messages')
+    expect(stuck.whats().slice(-3)).toEqual(TURN_END_TAIL)
+  })
+
+  it('still reports an owed flush when the channel FAILS later in the window', () => {
+    vi.useFakeTimers()
+    // #5 review, finding 1. The stuck list used to be rebuilt from scratch on
+    // every attempt, and a `failed` drain skips the settle/flush block
+    // entirely — so a flush that deferred on attempt 1 simply vanished, and
+    // the exit reported `{complete: true}` with the user's prompt gone. A
+    // falsely clean exit is the exact failure mode #910 item 1 is about, and
+    // the pre-PR code reported this one correctly.
+    const { sequencer, setBusy, setFailed } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25 })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setBusy({ flush: true })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    expect(outcomes).toEqual([])
+
+    // The reader's own retry hits a non-busy read error and fails the channel.
+    setFailed(true)
+    vi.advanceTimersByTime(200)
+    expect(outcomes).toHaveLength(1)
+    expect(outcomes[0]!.complete).toBe(false)
+    expect((outcomes[0] as { detail: string }).detail).toContain('prompt')
+  })
+
+  it('reports nothing owed when the channel was dead from the start', () => {
+    vi.useFakeTimers()
+    // The other side of the same rule: a channel that failed before the exit
+    // never owed anything. `failed` is terminal — the reader has already
+    // reported through onError — so retrying it forever would hold the pane
+    // open for a session that is already gone.
+    const { sequencer, whats, setFailed } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25 })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setFailed(true)
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    expect(outcomes).toEqual([{ complete: true }])
+    // And neither step was even attempted against a dead channel.
+    expect(whats().filter(what => what === 'settle' || what === 'flush')).toEqual([])
+  })
+
+  it('names the DRAIN when the drain is what stayed busy', () => {
+    vi.useFakeTimers()
+    // `EXIT_STEPS.drain` was the one label no test asserted, so a mutation
+    // that never named it survived the whole suite.
+    const { sequencer, setBusy } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25 })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setBusy({ drain: true })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    vi.advanceTimersByTime(200)
+    expect((outcomes[0] as { detail: string }).detail).toContain('committed messages')
+  })
+
+  it('reports the time spent waiting, not the time on the clock', () => {
+    vi.useFakeTimers()
+    // The one clock-driven test started its clock at 0, so `startedAt` could
+    // be replaced by the constant 0 and nothing noticed. A clock that is
+    // already well past zero when the exit begins tells the two apart.
+    let clock = 900_000
+    const { sequencer, setBusy } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25, now: () => clock })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setBusy({ flush: true })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    vi.advanceTimersByTime(199)
+    clock = 900_350
+    vi.advanceTimersByTime(1)
+    const detail = (outcomes[0] as { detail: string }).detail
+    expect(detail).toContain('350 ms')
+    expect(detail).not.toContain('900')
+  })
+
+  it('never reports a negative wait when the clock steps backwards', () => {
+    vi.useFakeTimers()
+    // NTP can step the wall clock back mid-window. "still busy -1500 ms" is
+    // the same genre of fabricated diagnostic this change set out to remove.
+    let clock = 900_000
+    const { sequencer, setBusy } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25, now: () => clock })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setBusy({ flush: true })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    vi.advanceTimersByTime(199)
+    clock = 898_500
+    vi.advanceTimersByTime(1)
+    expect((outcomes[0] as { detail: string }).detail).toContain('busy 0 ms')
+  })
+
+  it('drops the degraded partial once that assistant\'s completion row arrives', () => {
+    vi.useFakeTimers()
+    // #5 review, finding 2. The settle runs ONCE and froze its partial text,
+    // while the drain keeps running for the rest of the window — so a
+    // completion row landing mid-window was delivered as an entry and then
+    // contradicted by `turn_completed.fullText`, which still carried the
+    // partial. Agent Code's orchestration reads that field, so a child
+    // agent's answer was reported truncated.
+    const { log, sequencer, setBusy, setOpen, commitLater } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25 })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setOpen(record('msg_a', 'partial ans'))
+    setBusy({ flush: true })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    expect(outcomes).toEqual([])
+
+    // OpenCode's cleanup finishes writing the completion row, and the next
+    // re-drain picks it up.
+    commitLater('msg_a')
+    setBusy({ flush: false })
+    vi.advanceTimersByTime(25)
+
+    expect(outcomes).toEqual([{ complete: true }])
+    expect(log.find(entry => entry.what === 'turn_completed')?.detail).toBe('answer msg_a')
+  })
+
+  it('treats a FAILED settle as terminal, not as something to keep waiting for', () => {
+    vi.useFakeTimers()
+    // #5 review, finding 5: this branch was untested in either direction.
+    // `failed` means the reader has already reported through onError and will
+    // never read again — retrying it would hold the pane open for a channel
+    // that is gone, and reporting it stuck would tell the host a BUSY database
+    // is still being waited on. Only `deferred` is worth another pass.
+    const { sequencer, whats, setSettleResult } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25 })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setSettleResult({ status: 'failed' })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    expect(outcomes).toEqual([{ complete: true }])
+    expect(whats().filter(what => what === 'settle')).toHaveLength(1)
+  })
+
+  it('keeps the open assistant a DEFERRED settle handed back', () => {
+    vi.useFakeTimers()
+    // #5 review, finding 7. `settleOpenWork` does its irreversible work — it
+    // abandons open assistants — whenever the READ succeeded, and can still
+    // report `deferred` afterwards. Taking the assistant only on the
+    // `complete` path throws away the one look we get at it, and the turn end
+    // then reports an empty answer.
+    const { log, sequencer, setSettleResult, setBusy } = harness({ settleDeadlineMs: 200, settleRecheckMs: 25 })
+    sequencer.onLiveOutputs(turnStart('t1'))
+    setSettleResult({ status: 'deferred', openAssistant: record('msg_a', 'partial ans') })
+    setBusy({ flush: true })
+    const outcomes: SequencerExitOutcome[] = []
+    sequencer.onExit(turnEnd('t1'), outcome => outcomes.push(outcome))
+    expect(outcomes).toEqual([])
+    vi.advanceTimersByTime(200)
+    expect(outcomes).toHaveLength(1)
+    expect(log.find(entry => entry.what === 'turn_completed')?.detail).toBe('partial ans')
   })
 
   it('dispose during a wait emits nothing more and never calls the exit callback', () => {
