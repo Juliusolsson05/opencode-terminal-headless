@@ -107,7 +107,15 @@ function setUp(opts: { refuseReads?: () => boolean; journal?: 'wal' | 'delete'; 
     },
   })
   sequencer = seq
-  reader = new DurableReader({ store: used, sessionID: S, onRecords: r => seq.onDurableRecords(r), onError: e => errors.push(e.code) })
+  // WHY `batchSize` is pinned rather than left at the default (#5 review,
+  // finding 6): `DurableReader.settle()` delivers what it read BEFORE it
+  // reports BUSY, so "an entry arrived synchronously" does not by itself mean
+  // "the drain returned complete" — a lock landing between two batches of the
+  // SAME drain satisfies that control and still defers. These fixtures are a
+  // handful of events, so one batch reads them all and the control means what
+  // it says; a larger default, or a longer fixture, would have made it
+  // silently vacuous.
+  reader = new DurableReader({ store: used, sessionID: S, batchSize: 500, onRecords: r => seq.onDurableRecords(r), onError: e => errors.push(e.code) })
   reader.setLiveConnected(true)
   reader.start(-1)
   const projector = new LiveStateProjector(S, { now: () => 1 })
@@ -260,12 +268,55 @@ describe('SessionSequencer with the real reader over a real file', () => {
     // through, synchronously, before the lock existed. Had the lock landed
     // earlier the drain would have deferred, and the old loop — which watched
     // exactly that — would have covered the case, proving nothing.
+    //
+    // This holds because `batchSize` is 500 and the fixture is seven events,
+    // so the drain is ONE read: an entry delivered means that read committed.
+    // See the seam's comment for why that assumption has to be pinned.
     expect(order).toContain('entry:msg_a')
     expect(outcomes).toEqual([])
 
     await waitUntil(() => outcomes.length > 0, SETTLE_DEADLINE_MS + 2000, 'the exit drain to finish')
     expect(outcomes).toEqual([{ complete: true }])
     expect(order).toContain('entry:msg_u2')
+    expect(errors).toEqual([])
+  })
+
+  it('exit with a lock held across the FIRST attempt: the settle does not latch itself off against an empty assembler', async () => {
+    // #5 review, finding 3, which refuted this loop's claim that the
+    // drain-first guard was an equivalent mutant.
+    //
+    // `OpencodeStore.read` opens a DEFERRED transaction, so a settle or flush
+    // against an empty assembler issues no statement and never meets the
+    // lock: it reports `complete` and latches itself off for the whole
+    // window. Without the guard, attempt 1 (drain deferred, assembler empty)
+    // latches both steps; attempt 2's drain then reads the prompt into the
+    // assembler, and neither step ever runs again — #910 item 1, recreated,
+    // and reported as a clean exit.
+    //
+    // A REAL `BEGIN EXCLUSIVE` is required here, not the thrown stand-in: the
+    // stand-in refuses every read, statements or not, which is precisely the
+    // behaviour that makes the guard look equivalent. Only a real lock lets a
+    // statement-free settle through while the drain is refused.
+    const { order, errors, bus, row, projector, sequencer: seq } = setUp({ journal: 'delete' })
+    // The prompt is on disk but UNREAD, so the assembler holds nothing when
+    // the first attempt runs. That is the whole shape of the finding.
+    row('message.updated.1', { sessionID: S, info: user })
+    row('message.part.updated.1', { sessionID: S, time: T, part: userPart })
+    bus('session.status', { sessionID: S, status: { type: 'busy' } })
+    writer!.lock()
+
+    const outcomes: SequencerExitOutcome[] = []
+    seq.onExit(projector.endForExit(), outcome => outcomes.push(outcome))
+    await settle(30)
+    expect(outcomes).toEqual([])
+    expect(order.some(item => item.startsWith('entry:'))).toBe(false)
+
+    writer!.unlock()
+    await waitUntil(() => outcomes.length > 0, SETTLE_DEADLINE_MS + 2000, 'the exit drain to finish')
+    expect(outcomes).toEqual([{ complete: true }])
+    // The prompt reached the stream. Without the guard this is missing and
+    // the outcome still says `complete`.
+    expect(order).toContain('entry:msg_u')
     expect(errors).toEqual([])
   })
 
