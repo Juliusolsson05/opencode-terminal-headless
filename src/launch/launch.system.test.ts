@@ -62,6 +62,31 @@ describe('resolveOpencodeDbPath', () => {
     writeFileSync(binary, '#!/bin/sh\necho /fixed/opencode.db\n')
     await expect(resolveOpencodeDbPath({ binary, env: { PATH: '/usr/bin:/bin' } })).resolves.toBe('/fixed/opencode.db')
   })
+
+  // #1114. The whole incident was diagnosed from the app's incident log rather
+  // than from the error, because a child killed by execFile's timeout writes no
+  // stderr and Node's message is then just `Command failed: <cmd>`. Each case
+  // below is a distinct operator action — wait and retry, fix the install,
+  // upgrade OpenCode — so the message has to tell them apart.
+  it('names a timeout as a timeout, with the budget it blew', async () => {
+    const binary = fakeOpencode('sleep 5')
+    await expect(
+      resolveOpencodeDbPath({ binary, env: { PATH: '/usr/bin:/bin' }, timeoutMs: 60 }),
+    ).rejects.toThrow(/timed out after 60 ms and was killed with SIGTERM/)
+  })
+
+  it('reports a non-zero exit with its code and what the binary complained about', async () => {
+    const binary = fakeOpencode('echo "unknown command: db" >&2\nexit 2')
+    await expect(
+      resolveOpencodeDbPath({ binary, env: { PATH: '/usr/bin:/bin' } }),
+    ).rejects.toThrow(/exited with code 2: unknown command: db/)
+  })
+
+  it('reports a binary that could not be started by its spawn code', async () => {
+    await expect(
+      resolveOpencodeDbPath({ binary: join(dir, 'absent'), env: { PATH: '/usr/bin:/bin' } }),
+    ).rejects.toThrow(/could not be started \(ENOENT\)/)
+  })
 })
 
 // The cache key must cover every input that decides WHICH executable answers

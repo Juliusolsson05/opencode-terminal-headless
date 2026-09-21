@@ -190,4 +190,96 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     await r.headless.start()
     expect(r.log.find(e => e.kind === 'error')).toMatchObject({ error: { channel: 'durable', code: 'db_path_unavailable' } })
   })
+
+  // #1114. The recorded failure was `opencode db path` overrunning its 20 s
+  // budget during a multi-pane restore and being killed — a busy machine, not a
+  // broken OpenCode. Because this branch used to `return`, that one moment cost
+  // the pane its committed stream until the app was restarted. These pin the
+  // recovery on the real path: a real SQLite file, a real replay, and the
+  // recording's own rows as the oracle.
+  it('recovers the committed stream when a retried database path resolves', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let attempts = 0
+    // The rig's own dbPath is a real database with the session already seeded,
+    // so a successful retry has to produce a genuinely readable channel — not
+    // merely a non-null string that silences the error.
+    let real = ''
+    const r = await rig(recording, {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5, 5, 5],
+      resolveDbPath: async () => {
+        attempts += 1
+        // Fails exactly the way the incident did, then succeeds the way the
+        // very next attempt would have.
+        if (attempts === 1) throw new Error('`opencode db path` timed out after 20000 ms and was killed with SIGTERM')
+        return real
+      },
+    })
+    real = r.dbPath
+    await startConnected(r)
+    await waitUntil(() => attempts >= 2, 3000, 'db path retried')
+    await replay(r, buildReplayScript(recording))
+
+    // The degraded state was reported once, up front — a dark pane must say so
+    // rather than look healthy while it retries.
+    expect(r.log.filter(e => e.kind === 'error')).toHaveLength(1)
+    expect(r.log.find(e => e.kind === 'error')).toMatchObject({ error: { code: 'db_path_unavailable' } })
+    // And then the channel actually works: every row the recording commits.
+    await waitUntil(
+      () => r.log.some(e => e.kind === 'semantic' && e.event.type === 'turn_completed'),
+      5000,
+      'turn end after recovery',
+    )
+    const ids = r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id)
+    expect(new Set(ids)).toEqual(expectedCommits(recording).ids)
+  })
+
+  it('stops retrying the database path, and says it has, once the ladder is spent', async () => {
+    let attempts = 0
+    const r = await rig(loadLiveFixture('plain.json'), {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5, 5],
+      resolveDbPath: async () => {
+        attempts += 1
+        throw new Error('`opencode db path` could not be started (ENOENT)')
+      },
+    })
+    await r.headless.start()
+    await waitUntil(() => r.log.filter(e => e.kind === 'error').length === 2, 3000, 'recovery abandoned')
+
+    // Exactly the ladder, and not one attempt more: a broken install must not
+    // respawn a ~143 MB process forever behind the user's back.
+    expect(attempts).toBe(2)
+    const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
+    expect(errors[0]?.error.message).toContain('Retrying in the background')
+    expect(errors[1]?.error.message).toContain('still unavailable after 2 retries')
+    expect(errors[1]?.error.message).toContain('ENOENT')
+    // Negative window: the spent ladder must not arm another timer.
+    await settle(60)
+    expect(attempts).toBe(2)
+  })
+
+  it('never opens a store from a database path that resolved after stop()', async () => {
+    // The awaited resolve cannot be cancelled, so its continuation is the fence.
+    // Without it a stopped pane opens a SQLite handle nobody will ever release.
+    let release!: (path: string) => void
+    const pending = new Promise<string>(resolve => { release = resolve })
+    let opened = 0
+    const r = await rig(loadLiveFixture('plain.json'), {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: () => pending,
+      openStore: path => {
+        opened += 1
+        return openOpencodeStore(path)
+      },
+    })
+    await r.headless.start()
+    await settle(40)
+    await r.headless.stop()
+    release(r.dbPath)
+    await settle(60)
+
+    expect(opened).toBe(0)
+  })
 })
