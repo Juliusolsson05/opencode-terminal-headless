@@ -15,8 +15,12 @@
 //   channels/    semantic / screen / committed, the siblings' shape
 //
 // Degradation is explicit, never silent:
-// - No database path, or a database this reader refuses → `transcript-error`.
-//   Activity and conditions still work.
+// - A database this reader refuses → `transcript-error`. Activity and
+//   conditions still work.
+// - No database path → `db_path_retrying` while the host's `resolveDbPath` is
+//   retried, then either `db_path_recovered_late` (the channel opened, and the
+//   rows committed while it was dark are named as missing) or a permanent
+//   `db_path_unavailable`. With no resolver, the permanent code at once.
 // - A server that never answers (the port was lost to a race: the TUI then
 //   neither exits nor paints, Stage 0) → `live-state { connected: false,
 //   reason: 'server-unreachable' }` after the connect deadline. Committed
@@ -61,11 +65,16 @@ export type OpencodeTerminalHeadlessOptions = {
    * Re-resolve the database path after `launch.dbPath` came back null (#1114).
    *
    * WHY the host injects this rather than the class calling
-   * `resolveOpencodeDbPath` itself: that helper runs `opencode db path` in a
-   * child process, and this package's standing rule is that the host owns every
-   * process — the same rule that keeps the PTY on the caller's side. Injection
-   * also keeps the failure hermetic: with no resolver there is no recovery and
-   * no exec, which is exactly what the `dbPath: null` system tests want.
+   * `resolveOpencodeDbPath` itself: it keeps the failure hermetic. With no
+   * resolver there is no recovery and no exec, which is exactly what the
+   * `dbPath: null` system tests want, and what any host that would rather fail
+   * fast than retry gets for free.
+   *
+   * NOT because the package may not spawn (review R2-F6 corrected an earlier
+   * version of this comment that said so): `prepareLaunch.ts`, same package,
+   * runs `opencode db path` through `execFile` itself. The rule is narrower and
+   * belongs to THIS CLASS, whose header states it — it never spawns or kills a
+   * process, so that the PTY and every child stay on the caller's side.
    */
   resolveDbPath?: () => Promise<string>
   /** Delays before each `resolveDbPath` attempt, and by their count how many. */
@@ -172,12 +181,18 @@ const RESYNC_MAX_RETRIES = 6
 
 // Delays before each background re-resolution of the database path (#1114),
 // and by their count the number of attempts. Explicit steps rather than a
-// doubling factor because the shape is chosen, not derived: ~51 s in total is
-// long enough to outlast the multi-pane restore storm that produced the only
-// recorded failure (two panes, `opencode db path` killed at its 20 s budget),
-// while the first step is still short enough that a pane which merely lost a
-// race gets its committed stream back almost immediately. See `recoverDbPath`
-// for why this must not reuse the durable-open ladder.
+// doubling factor because the shape is chosen, not derived: long enough to
+// outlast the multi-pane restore storm that produced both recorded failures,
+// while the first step is short enough that a pane which merely lost a race
+// gets its committed stream back almost immediately.
+//
+// The delays SUM to 51 s, but that is not the budget: each step is armed from
+// the previous attempt's rejection, and an attempt can itself burn the 20 s
+// `execFile` timeout, so the worst case before the final report is ~131 s
+// (review R1-F8). That number is the one that matters, because it is also how
+// long the gap in `openDurableAfterRecovery` can be.
+//
+// See `recoverDbPath` for why this must not reuse the durable-open ladder.
 const DB_PATH_RECOVERY_DELAYS_MS = [1_000, 5_000, 15_000, 30_000]
 
 // WHY a depth bound on the descendant walk: each hop is a synchronous SQLite
@@ -528,46 +543,114 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   private recoverDbPath(): void {
     if (this.dbPathRecoveryInFlight || this.dbPathRecoveryTimer || this.isClosed()) return
     const resolve = this.options.resolveDbPath
+    const ladder = this.options.dbPathRetryDelaysMs ?? DB_PATH_RECOVERY_DELAYS_MS
+    // Is there actually a retry to promise? Gating the wording on `resolve`
+    // alone once promised "retrying in the background" to a host that passed an
+    // EMPTY ladder, which then never retried and never reported again (review
+    // R1-F6/R2-F6). The message and the behaviour come off the same condition.
+    const willRetry = resolve !== undefined && ladder.length > 0
     // Reported before the first retry, not after the last: a pane whose
-    // committed stream is dark should say so now. The message names the
-    // recovery so the banner is not claiming a permanence it no longer has.
+    // committed stream is dark should say so now.
+    //
+    // WHY a DIFFERENT code while retrying (review R1-F5/R2-F1, both confirmed):
+    // `db_path_unavailable` is load-bearing downstream. Agent Code's renderer
+    // treats every `OpenCode durable channel (…)` diagnostic except two named
+    // ones as a LIFETIME banner, and #864 AC8 made this code mean "cannot run,
+    // permanently" — `managedTranscriptUnavailableReason` reports
+    // `transcript_unavailable` to every parent agent reading this pane. There
+    // is no retraction path for it. Reporting it and then recovering therefore
+    // left the pane, Agent Status and every orchestration parent marked broken
+    // over a working transcript, for the life of the app — cancelling the whole
+    // point of recovering. `db_path_retrying` is a transient diagnostic the
+    // renderer can supersede; the permanent code is emitted only once the
+    // ladder is spent and the claim is true again.
     if (this.dbPathRecoveryAttempt === 0) {
       const detail = this.launch.dbPathError ?? 'OpenCode database path is unavailable'
-      this.reportError('durable', 'db_path_unavailable', resolve
-        ? `${detail}. Retrying in the background; this pane has no committed transcript until it succeeds.`
-        : detail)
+      if (willRetry) this.reportError('durable', 'db_path_retrying', `${detail}. Retrying in the background; this pane has no committed transcript until it succeeds.`)
+      else this.reportError('durable', 'db_path_unavailable', detail)
+      // `reportError` hands control to the host, which may stop this instance
+      // from inside the handler — the invariant `start()` documents by name.
+      // Without this the timer below is armed after teardown already ran and
+      // cleared it, holding the instance for up to a full ladder step (R1-F4).
+      if (this.isClosed()) return
     }
-    const ladder = this.options.dbPathRetryDelaysMs ?? DB_PATH_RECOVERY_DELAYS_MS
-    if (!resolve || this.dbPathRecoveryAttempt >= ladder.length) return
+    if (!willRetry || this.dbPathRecoveryAttempt >= ladder.length) return
     const delay = ladder[this.dbPathRecoveryAttempt] as number
     this.dbPathRecoveryAttempt += 1
     this.dbPathRecoveryTimer = setTimeout(() => {
       this.dbPathRecoveryTimer = null
       if (this.isClosed()) return
       this.dbPathRecoveryInFlight = true
-      resolve().then(
+      const onFailure = (error: unknown): void => {
+        this.dbPathRecoveryInFlight = false
+        if (this.isClosed()) return
+        if (this.dbPathRecoveryAttempt >= ladder.length) {
+          // The last report, and the first time the permanent code is honest.
+          this.reportError('durable', 'db_path_unavailable', `OpenCode database path is still unavailable after ${ladder.length} retries: ${error instanceof Error ? error.message : String(error)}`)
+          return
+        }
+        this.recoverDbPath()
+      }
+      // `resolveDbPath` is host code. A SYNCHRONOUS throw from it would escape
+      // this timer callback and become an uncaught exception in the host's main
+      // process — the one thing this package's timer callbacks all promise not
+      // to do (review R2-F5). Routed into the same ladder as a rejection.
+      let pending: Promise<string>
+      try {
+        pending = resolve()
+      } catch (error) {
+        onFailure(error)
+        return
+      }
+      pending.then(
         path => {
           this.dbPathRecoveryInFlight = false
           // Fenced: the awaited resolve can land after a stop or a PTY exit,
           // and opening a store then would leak one past teardown.
           if (this.isClosed()) return
-          this.dbPath = path
-          this.openDurable()
-        },
-        (error: unknown) => {
-          this.dbPathRecoveryInFlight = false
-          if (this.isClosed()) return
-          if (this.dbPathRecoveryAttempt >= ladder.length) {
-            // The second and last report. Distinct from the first so the user
-            // can tell "degraded, working on it" from "this is how it stays".
-            this.reportError('durable', 'db_path_unavailable', `OpenCode database path is still unavailable after ${ladder.length} retries: ${error instanceof Error ? error.message : String(error)}`)
+          // A resolver that fulfils with an empty string would set a falsy
+          // path, send `openDurable` straight back here, and — with the ladder
+          // spent — park the pane dark with no second report at all. The real
+          // resolver rejects a non-absolute answer, but the injected type
+          // cannot promise that (review R1-F7).
+          if (!path) {
+            onFailure(new Error('resolveDbPath resolved without a path'))
             return
           }
-          this.recoverDbPath()
+          this.dbPath = path
+          this.openDurableAfterRecovery()
         },
+        onFailure,
       )
     }, delay)
     this.dbPathRecoveryTimer.unref?.()
+  }
+
+  /**
+   * Open the durable channel for the first time, LATE — and say what that cost.
+   *
+   * WHY this is not just `openDurable()` (review R1-F1/R2-F2, both confirmed by
+   * running it): `DurableReader.position()` seeds itself from the session's
+   * CURRENT head and marks every message already in the database as history the
+   * host has seen. That is right at `start()`, where the TUI has committed
+   * nothing yet. It is wrong here, seconds to minutes later: everything OpenCode
+   * committed while the path was dark is in neither the tail nor the host's
+   * history, and is dropped. The recorded shape is a pane that emits an
+   * assistant answer whose user prompt never appears — worse than the dark
+   * channel this recovery exists to fix, because a hole looks like data.
+   *
+   * WHY this reports the hole instead of healing it: healing needs the ids the
+   * HOST already has, and the host is the only party that knows them — the
+   * package cannot tell "committed while dark" from "committed last week" by
+   * looking at the database. Closing it properly is a host-side history reload
+   * (#1117). What must not happen in the meantime is silence: this class's
+   * contract is that degradation is explicit, and `DurableReader`'s own header
+   * says a transcript with silent holes is the thing it refuses to emit.
+   */
+  private openDurableAfterRecovery(): void {
+    this.openDurable()
+    if (this.isClosed() || !this.reader) return
+    this.reportError('durable', 'db_path_recovered_late', `OpenCode's committed stream is being read again, but anything committed while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'}) is missing from this pane's transcript. Reload the session to re-read it.`)
   }
 
   private scheduleDurableOpen(): void {
@@ -781,10 +864,13 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     this.deadlineTimer = null
     if (this.durableOpenTimer) clearTimeout(this.durableOpenTimer)
     this.durableOpenTimer = null
-    // Same reason as the durable-open timer: a pending db-path retry would
-    // otherwise outlive the exit by up to its 30 s delay and then spawn a
-    // process for a pane nobody is watching. The in-flight resolve itself
-    // cannot be cancelled, so its continuations re-check `isClosed()`.
+    // Same reason as the durable-open timer. Note what this does NOT buy,
+    // since an earlier comment here claimed it (review R2-M9): the timer is
+    // unref'd and its callback bails on `isClosed()`, so a forgotten
+    // `clearTimeout` would not actually spawn anything for a dead pane. This
+    // just stops a dead instance being held for up to a ladder step. The
+    // in-flight resolve cannot be cancelled at all, so its continuations
+    // re-check `isClosed()` themselves.
     if (this.dbPathRecoveryTimer) clearTimeout(this.dbPathRecoveryTimer)
     this.dbPathRecoveryTimer = null
     this.stream?.stop()
