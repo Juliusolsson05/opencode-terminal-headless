@@ -62,6 +62,9 @@ export type RigOverrides = {
   dbPath?: string | null
   deadlineMs?: number
   openStore?: (dbPath: string) => OpencodeStore
+  /** Host-owned db-path re-resolution, and the ladder it is attempted on (#1114). */
+  resolveDbPath?: () => Promise<string>
+  dbPathRetryDelaysMs?: readonly number[]
   resyncRetryMs?: number
   /**
    * Share an existing rig's database: same SQLite file and writer, but a new
@@ -145,6 +148,8 @@ export function useReplayRigs(): {
       sseMaxBackoffMs: 80,
       resyncRetryMs: overrides.resyncRetryMs ?? 20,
       ...(overrides.openStore ? { openStore: overrides.openStore } : {}),
+      ...(overrides.resolveDbPath ? { resolveDbPath: overrides.resolveDbPath } : {}),
+      ...(overrides.dbPathRetryDelaysMs ? { dbPathRetryDelaysMs: overrides.dbPathRetryDelaysMs } : {}),
     })
     cleanups.push(() => headless.stop())
     const log: LogEntry[] = []

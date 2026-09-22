@@ -31,7 +31,14 @@ export type OpencodeTerminalLaunch = {
   env: Record<string, string>
   sessionID: string
   server: { url: string; username: string; password: string }
-  /** Null when the database path could not be resolved; the durable channel is then disabled. */
+  /**
+   * Null when the database path could not be resolved here.
+   *
+   * That is no longer the end of it: `OpencodeTerminalHeadless` retries the
+   * lookup through its own `resolveDbPath` option and opens the channel late if
+   * one arrives (#1114). A host that passes no resolver still gets the old
+   * behaviour — the durable channel stays disabled and says so.
+   */
   dbPath: string | null
   dbPathError?: string
 }

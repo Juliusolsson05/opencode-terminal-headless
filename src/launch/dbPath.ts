@@ -25,10 +25,40 @@
 //   exists to avoid, on every pane, for an event that needs a reinstall; the
 //   host picks up the new answer on its next start.
 
-import { execFile } from 'node:child_process'
+import { execFile, type ExecFileException } from 'node:child_process'
 import { delimiter, isAbsolute, sep } from 'node:path'
 
 const memo = new Map<string, Promise<string>>()
+
+// WHY twenty seconds for a command that answers in under one: the binary is a
+// ~143 MB Bun single-file executable, and a restore that brings back panes at
+// once starts several of them against a cold page cache. Measured on an idle
+// machine: 0.37 s warm, 2.15 s cold.
+//
+// The budget is reachable, and has been reached twice — TWO separate incidents,
+// which an earlier draft of this comment merged into one (review R2):
+//   * 2026-09-20T22-51-32 run, ONE opencode pane, `provider.start.end` at
+//     20087 ms — this budget plus overhead, on a single pane with nothing to
+//     contend with but the machine itself;
+//   * 2026-09-21T17-12-16 run, TWO panes, 24095 ms and 23830 ms, both released
+//     in the same millisecond by the shared memo below.
+// Healthy starts in the same logs are 4–2300 ms. In both, the pane then ran
+// with a dark committed channel for the rest of the session — visible in
+// feed-debug as turns completing with zero `jsonl_entries`.
+//
+// WHY it is not simply raised: a longer budget makes a genuinely broken install
+// hang the pane for longer, and the lookup sits on the pane's startup path —
+// `prepareOpencodeTerminalLaunch` awaits it before the TUI is spawned, so every
+// second here is a second of empty pane. The transient case is handled where it
+// belongs instead, by `OpencodeTerminalHeadless` retrying the lookup in the
+// background once the storm has passed.
+const DEFAULT_TIMEOUT_MS = 20_000
+
+// Enough for a path plus any notice OpenCode prints before it. Named because
+// `describeExecFailure` quotes it: a child that overruns this is stopped by
+// Node with a STRING error code, which has to be told apart from a spawn
+// failure that shares that shape (review R2-F4).
+const MAX_OUTPUT_BYTES = 64 * 1024
 
 // The variables that can move OpenCode's data directory (storage/db.ts reads
 // OPENCODE_DB and OPENCODE_DISABLE_CHANNEL_DB; Global.Path.data follows
@@ -71,17 +101,71 @@ export function resolveOpencodeDbPath(options: ResolveDbPathOptions): Promise<st
   return pending
 }
 
+/**
+ * Say what actually went wrong, in a sentence a user can act on (#1114).
+ *
+ * WHY this exists instead of `error.message`: when a child is killed before it
+ * printed anything, Node composes the message as `Command failed: <cmd>` and
+ * appends an empty stderr. The result was a banner that said
+ * "`… opencode db path` failed: Command failed: … opencode db path" and
+ * nothing else: no exit code, no signal, no hint that a kill was involved at
+ * all. Diagnosing it took the app's incident log (a `provider.start.end` of
+ * 20087 ms against this file's 20000 ms budget) — the message itself carried
+ * nothing.
+ *
+ * WHY `killed` is not the whole story, and the ordering that follows from it
+ * (review R2-F2/F4, both confirmed against Node 24.14.1): `error.killed`
+ * mirrors `child.killed`, which Node sets only when NODE ITSELF called
+ * `child.kill()` — its timeout and maxBuffer paths. A child killed by anything
+ * else (the OS reclaiming a ~143 MB Bun process under the memory pressure that
+ * blew the budget in the first place, or a process-group kill at app shutdown)
+ * arrives with `killed === false`, `code === null`, and the signal ONLY in
+ * `error.signal`. Reading `killed` alone reproduced the exact useless message
+ * this function exists to delete, so `signal` is checked in its own right.
+ *
+ * Nothing branches on the result — `recoverDbPath` retries every rejection
+ * alike, and the ladder is what bounds a genuinely broken install. This is a
+ * message for a human, not a classification for code.
+ */
+function describeExecFailure(
+  error: ExecFileException,
+  stderr: string,
+  timeoutMs: number,
+): string {
+  const detail = stderr.trim().split(/\r?\n/).filter(Boolean).slice(-3).join('; ')
+  const suffix = detail ? `: ${detail}` : ''
+  // Node's own timeout kill. `killed` alone would also catch the maxBuffer
+  // kill, which is why that one is claimed first, below.
+  if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+    // The binary RAN and printed more than the cap; it may even have printed a
+    // valid path. Keeping stderr matters here more than anywhere else, because
+    // whatever is flooding the stream is the thing to go and look at.
+    return `printed more than ${MAX_OUTPUT_BYTES} bytes and was stopped${suffix}`
+  }
+  if (error.killed) return `timed out after ${timeoutMs} ms and was killed with ${error.signal ?? 'SIGTERM'}${suffix}`
+  // Killed from OUTSIDE Node: `killed` is false and the code is null, so the
+  // signal is the only evidence there is. Naming it is the difference between
+  // "the machine took this process away" and a silent mystery.
+  if (error.signal) return `was killed from outside with ${error.signal}${suffix}`
+  if (typeof error.code === 'number') return `exited with code ${error.code}${suffix}`
+  // A string code that is not the maxBuffer one is a spawn-level failure
+  // (ENOENT, EACCES, …): the command never ran, so there is no stderr to add.
+  if (typeof error.code === 'string') return `could not be started (${error.code})`
+  return `failed: ${error.message}${suffix}`
+}
+
 function run(options: ResolveDbPathOptions): Promise<string> {
   const env: Record<string, string> = {}
   for (const [name, value] of Object.entries(options.env)) if (typeof value === 'string') env[name] = value
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   return new Promise((resolve, reject) => {
     execFile(
       options.binary,
       ['db', 'path'],
-      { cwd: options.cwd, env, encoding: 'utf8', timeout: options.timeoutMs ?? 20_000, maxBuffer: 64 * 1024 },
-      (error, stdout) => {
+      { cwd: options.cwd, env, encoding: 'utf8', timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES },
+      (error, stdout, stderr) => {
         if (error) {
-          reject(new Error(`\`${options.binary} db path\` failed: ${error.message}`))
+          reject(new Error(`\`${options.binary} db path\` ${describeExecFailure(error, stderr, timeoutMs)}`))
           return
         }
         // The last non-empty line is the path; OpenCode may print notices

@@ -189,5 +189,148 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     const r = await rig(loadLiveFixture('plain.json'), { dbPath: null })
     await r.headless.start()
     expect(r.log.find(e => e.kind === 'error')).toMatchObject({ error: { channel: 'durable', code: 'db_path_unavailable' } })
+    // A host that passed no resolver must be told the truth: this is permanent
+    // for this pane. Promising a background retry here survived mutation until
+    // this assertion existed (review R2-M12), and it is the sentence a
+    // resolver-less host shows its users.
+    const message = r.log.find((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')?.error.message ?? ''
+    expect(message).not.toContain('Retrying in the background')
+  })
+
+  // #1114. The recorded failure was `opencode db path` overrunning its 20 s
+  // budget during a multi-pane restore and being killed — a busy machine, not a
+  // broken OpenCode. Because this branch used to `return`, that one moment cost
+  // the pane its committed stream until the app was restarted. These pin the
+  // recovery on the real path: a real SQLite file, a real replay, and the
+  // recording's own rows as the oracle.
+  it('names the rows it lost when the database path arrives late', async () => {
+    // #1114 review R1-F1/R2-F2. The headline recovery test below replays only
+    // AFTER the retry lands, which is the one ordering in which completeness is
+    // free. This one writes the session's rows while the channel is still dark
+    // — the real shape of the incident, where the TUI ran for a full 20 s
+    // timeout before anyone could read it — and pins what the pane ends up
+    // with. The reader positions at the CURRENT head, so those rows are gone;
+    // what must not happen is losing them silently.
+    const recording = loadLiveFixture('plain.json')
+    let release!: (path: string) => void
+    const pending = new Promise<string>(resolve => { release = resolve })
+    const r = await rig(recording, {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: () => pending,
+    })
+    await startConnected(r)
+    // Everything the TUI commits here lands while the path is unavailable.
+    await replay(r, buildReplayScript(recording))
+    release(r.dbPath)
+    await waitUntil(
+      () => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'),
+      3000,
+      'late-open report',
+    )
+
+    const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
+    // Transient first, so a pane that heals is not banner-ed for life; then the
+    // honest statement that this transcript has a hole in it.
+    expect(errors.map(e => e.error.code)).toEqual(['db_path_retrying', 'db_path_recovered_late'])
+    expect(errors[1]?.error.message).toContain('is missing from this pane\'s transcript')
+    // The gap is real and this is the assertion that says so out loud: the
+    // rows committed while dark are NOT emitted. If a later change heals them,
+    // this expectation is what should be rewritten, deliberately.
+    const ids = r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id)
+    expect(ids).toEqual([])
+    expect(expectedCommits(recording).ids.size).toBeGreaterThan(0)
+  })
+
+  it('recovers the committed stream when a retried database path resolves', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let attempts = 0
+    // The rig's own dbPath is a real database with the session already seeded,
+    // so a successful retry has to produce a genuinely readable channel — not
+    // merely a non-null string that silences the error.
+    let real = ''
+    const r = await rig(recording, {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5, 5, 5],
+      resolveDbPath: async () => {
+        attempts += 1
+        // Fails exactly the way the incident did, then succeeds the way the
+        // very next attempt would have.
+        if (attempts === 1) throw new Error('`opencode db path` timed out after 20000 ms and was killed with SIGTERM')
+        return real
+      },
+    })
+    real = r.dbPath
+    await startConnected(r)
+    await waitUntil(() => attempts >= 2, 3000, 'db path retried')
+    await replay(r, buildReplayScript(recording))
+
+    // The degraded state was reported once, up front — a dark pane must say so
+    // rather than look healthy while it retries — and under the RETRYING code,
+    // never the permanent one. `db_path_unavailable` means "cannot run,
+    // permanently" to the renderer's lifetime banner and to
+    // `managedTranscriptUnavailableReason` (#864 AC8), with no retraction
+    // anywhere; emitting it for a pane that then healed left it marked broken
+    // over a working transcript for the life of the app (review R1-F5/R2-F1).
+    const codes = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error').map(e => e.error.code)
+    expect(codes).not.toContain('db_path_unavailable')
+    expect(codes[0]).toBe('db_path_retrying')
+    // And then the channel actually works: every row the recording commits.
+    await waitUntil(
+      () => r.log.some(e => e.kind === 'semantic' && e.event.type === 'turn_completed'),
+      5000,
+      'turn end after recovery',
+    )
+    const ids = r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id)
+    expect(new Set(ids)).toEqual(expectedCommits(recording).ids)
+  })
+
+  it('stops retrying the database path, and says it has, once the ladder is spent', async () => {
+    let attempts = 0
+    const r = await rig(loadLiveFixture('plain.json'), {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5, 5],
+      resolveDbPath: async () => {
+        attempts += 1
+        throw new Error('`opencode db path` could not be started (ENOENT)')
+      },
+    })
+    await r.headless.start()
+    await waitUntil(() => r.log.filter(e => e.kind === 'error').length === 2, 3000, 'recovery abandoned')
+
+    // Exactly the ladder, and not one attempt more: a broken install must not
+    // respawn a ~143 MB process forever behind the user's back.
+    expect(attempts).toBe(2)
+    const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
+    expect(errors[0]?.error.message).toContain('Retrying in the background')
+    expect(errors[1]?.error.message).toContain('still unavailable after 2 retries')
+    expect(errors[1]?.error.message).toContain('ENOENT')
+    // Negative window: the spent ladder must not arm another timer.
+    await settle(60)
+    expect(attempts).toBe(2)
+  })
+
+  it('never opens a store from a database path that resolved after stop()', async () => {
+    // The awaited resolve cannot be cancelled, so its continuation is the fence.
+    // Without it a stopped pane opens a SQLite handle nobody will ever release.
+    let release!: (path: string) => void
+    const pending = new Promise<string>(resolve => { release = resolve })
+    let opened = 0
+    const r = await rig(loadLiveFixture('plain.json'), {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: () => pending,
+      openStore: path => {
+        opened += 1
+        return openOpencodeStore(path)
+      },
+    })
+    await r.headless.start()
+    await settle(40)
+    await r.headless.stop()
+    release(r.dbPath)
+    await settle(60)
+
+    expect(opened).toBe(0)
   })
 })
