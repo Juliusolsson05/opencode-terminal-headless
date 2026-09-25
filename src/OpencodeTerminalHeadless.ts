@@ -232,6 +232,9 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   // while this is what the durable channel should open right now.
   private dbPath: string | null = null
   private dbPathRecoveryAttempt = 0
+  /** A late path recovery whose hole is not reported yet; the next reader
+   *  start reports it (see openDurableAfterRecovery). */
+  private lateRecoveryUnreported = false
   private dbPathRecoveryTimer: ReturnType<typeof setTimeout> | null = null
   private dbPathRecoveryInFlight = false
   // Advanced on every live (re)connect AND every disconnect. A re-sync
@@ -510,6 +513,9 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     this.reader = reader
     reader.start()
     if (this.isClosed()) return
+    // After start(), so the reader has positioned at the head the report
+    // describes, and a host that reloads on it reads from after that seed.
+    this.reportLateRecovery()
     // The live channel may have connected while the open was being retried.
     // WHY the stream's own state and not `liveState`: `liveState` is what was
     // last REPORTED; the transport is the one owner of connectivity. Telling
@@ -648,8 +654,20 @@ export class OpencodeTerminalHeadless extends EventEmitter {
    * says a transcript with silent holes is the thing it refuses to emit.
    */
   private openDurableAfterRecovery(): void {
+    // WHY a flag the open consumes, not a report here (agent-code#1229 review
+    // A): the restore storm that timed the path lookup out is the same one
+    // that makes the first open BUSY, and a busy open returns with no reader
+    // and retries later through `scheduleDurableOpen` -> `openDurable`. A
+    // report tied to THIS call was skipped on that path, so the hole went
+    // unnamed and the host never healed it. The report now fires wherever the
+    // reader actually starts, exactly once.
+    this.lateRecoveryUnreported = true
     this.openDurable()
-    if (this.isClosed() || !this.reader) return
+  }
+
+  private reportLateRecovery(): void {
+    if (!this.lateRecoveryUnreported) return
+    this.lateRecoveryUnreported = false
     this.reportError('durable', 'db_path_recovered_late', `OpenCode's committed stream is being read again, but anything committed while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'}) is missing from this pane's transcript. Reload the session to re-read it.`)
   }
 

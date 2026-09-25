@@ -242,6 +242,41 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(expectedCommits(recording).ids.size).toBeGreaterThan(0)
   })
 
+  it('still names the lost rows when the late open first meets a busy database', async () => {
+    // agent-code#1229 review A: the same restore storm that times the path
+    // lookup out is the one the store's BUSY retry exists for. The late open
+    // then went through the busy retry, which opens the store without the
+    // recovery report, so the hole was never named and the host never healed
+    // it — while the pane read as healthy on its next row.
+    const recording = loadLiveFixture('plain.json')
+    let release!: (path: string) => void
+    const pending = new Promise<string>(resolve => { release = resolve })
+    let refusals = 1
+    const r = await rig(recording, {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: () => pending,
+      openStore: path => {
+        if (refusals > 0) {
+          refusals -= 1
+          throw new OpencodeStoreError('busy', 'OpenCode schema check: database busy')
+        }
+        return openOpencodeStore(path)
+      },
+    })
+    await startConnected(r)
+    await replay(r, buildReplayScript(recording))
+    release(r.dbPath)
+    await waitUntil(
+      () => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'),
+      3000,
+      'late-open report after a busy open',
+    )
+    const codes = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error').map(e => e.error.code)
+    // Once, and only after the channel really opened.
+    expect(codes).toEqual(['db_path_retrying', 'db_path_recovered_late'])
+  })
+
   it('recovers the committed stream when a retried database path resolves', async () => {
     const recording = loadLiveFixture('plain.json')
     let attempts = 0
