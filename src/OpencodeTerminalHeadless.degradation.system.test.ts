@@ -244,6 +244,47 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(errors[0]?.error.message).toContain('could take input before the database path was known after launch')
   })
 
+  // #11 review a (survivor): the launch-window report must wait for the
+  // reader to POSITION, like the ladder's. A report made when the pending
+  // lookup lands would trigger the host's one history heal while the first
+  // cursor read is still BUSY; a turn committed in that gap lands behind the
+  // eventual head, with no second heal.
+  it('reports a launch-window gap only after a BUSY positioning read clears', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    let busy = true
+    let okReads = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        const read = store.read.bind(store)
+        return Object.assign(store, {
+          read: <T,>(fn: Parameters<typeof read<T>>[0]): T => {
+            if (busy) throw new OpencodeStoreError('busy', 'database is locked')
+            okReads += 1
+            return read(fn)
+          },
+        })
+      },
+    })
+    const reportedAfterReads: number[] = []
+    r.headless.on('transcript-error', error => {
+      if (error.code === 'db_path_recovered_late') reportedAfterReads.push(okReads)
+    })
+    await startConnected(r)
+    r.pty.output()
+    release()
+    await settle()
+    // A turn commits while the reader still cannot position.
+    await replay(r, buildReplayScript(recording))
+    expect(reportedAfterReads).toEqual([])
+    busy = false
+    await waitUntil(() => reportedAfterReads.length > 0, 3000, 'late-open report')
+    expect(reportedAfterReads[0]).toBeGreaterThan(0)
+    expect(reportedAfterReads).toHaveLength(1)
+  })
+
   // #10 verification a/b: the time check was fooled by (1) a message created
   // before launch and completed inside the window, and (2) a clock that
   // stepped backwards. Neither matters now: a launch clock set AFTER every
@@ -346,6 +387,98 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     release()
     await settle()
     expect(opened).toBe(0)
+  })
+
+  // #1397 review b and c (steering q97): after a late path recovery the store
+  // can open while its first POSITIONING read is BUSY. The late report used to
+  // fire right after `reader.start()`, before the reader had chosen its head.
+  // The host's one history heal then ran too early, and a turn committed
+  // before the positioning retry landed behind the new head, with no second
+  // report: a silent loss. The report must come from the reader's
+  // positioning, so a heal it triggers reads everything behind the head.
+  it('reports a late recovery only once the reader has positioned, after a BUSY positioning read', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let busy = true
+    let okReads = 0
+    const r = await rig(recording, {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: async () => r.dbPath,
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        const read = store.read.bind(store)
+        return Object.assign(store, {
+          read: <T,>(fn: Parameters<typeof read<T>>[0]): T => {
+            if (busy) throw new OpencodeStoreError('busy', 'database is locked')
+            okReads += 1
+            return read(fn)
+          },
+        })
+      },
+    })
+    // Record, at the moment of the report, whether any read had succeeded yet.
+    const reportedAfterReads: number[] = []
+    r.headless.on('transcript-error', error => {
+      if (error.code === 'db_path_recovered_late') reportedAfterReads.push(okReads)
+    })
+    await startConnected(r)
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_retrying'), 3000, 'retrying report')
+    // The path has recovered and the open is being retried against BUSY.
+    await settle()
+    // A turn is committed while the reader still cannot position.
+    await replay(r, buildReplayScript(recording))
+    expect(reportedAfterReads).toEqual([])
+    busy = false
+    await waitUntil(() => reportedAfterReads.length > 0, 3000, 'late-open report')
+    expect(reportedAfterReads[0]).toBeGreaterThan(0)
+    expect(reportedAfterReads).toHaveLength(1)
+  })
+
+  // #11 review c (survivor): the late report is tied to POSITIONING, so a
+  // reader that never positions must never claim a recovery. A report from
+  // the reader's error path would tell the host "healed, re-read history" for
+  // a channel that is dark; the host's heal would then pass and the reader's
+  // own failure would read as a stale second opinion.
+  it('reports no late recovery when the recovered store\'s first positioning read fails', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: async () => r.dbPath,
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        return Object.assign(store, {
+          read: (): never => { throw new OpencodeStoreError('read_failed', 'disk I/O error') },
+        })
+      },
+    })
+    await startConnected(r)
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'read_failed'), 3000, 'reader failure')
+    await settle()
+    const codes = r.log.flatMap(e => (e.kind === 'error' ? [e.error.code] : []))
+    expect(codes).toContain('db_path_retrying')
+    expect(codes).not.toContain('db_path_recovered_late')
+  })
+
+  // #1397 review a (survivor P3): with a pending launch lookup, delivery is
+  // held until the reader positions. A reader whose first positioning read
+  // fails permanently never positions, so its failure must release delivery:
+  // a dark channel is reported on its own and must not also cost every
+  // prompt on the pane its full deadline.
+  it('releases delivery when the reader\'s first positioning read fails after a pending lookup', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, {
+      dbPathPending: async path => path,
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        return Object.assign(store, {
+          read: (): never => { throw new OpencodeStoreError('read_failed', 'disk I/O error') },
+        })
+      },
+    })
+    await startConnected(r)
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'read_failed'), 3000, 'reader failure')
+    expect(await r.headless.submitPrompt('despite a dark reader', { timeoutMs: 1500 })).toEqual({ ok: true })
   })
 
   it('names the rows it lost when the database path arrives late', async () => {
