@@ -231,6 +231,24 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   // recoverable: `launch` is the immutable record of what the host prepared,
   // while this is what the durable channel should open right now.
   private dbPath: string | null = null
+  // The launch's database-path lookup, until `openDurable` takes it
+  // (agent-code#1114: the TUI is spawned without waiting for it).
+  private dbPathPending: Promise<string> | null = null
+  // Why the initial lookup failed, for the first recovery report.
+  private dbPathPendingError: string | null = null
+  // WHY programmatic delivery waits for this (agent-code#1114): the reader
+  // seeds from the session's CURRENT head when it positions, and treats every
+  // earlier row as history the host already has. That is right only while
+  // nothing has been committed since spawn. The lookup used to finish before
+  // the TUI existed, which made it true by construction. Now it runs alongside
+  // the TUI, so a prompt delivered before the reader positions would be
+  // committed and dropped. True once the initial lookup has settled and the
+  // first open was attempted (or there was no lookup to wait for).
+  private durableGateOpen = true
+  // A turn started (the user typed into the painted TUI) while the gate was
+  // still closed: the eventual open cannot see what it committed, so it says
+  // so through the existing late-recovery report.
+  private turnStartedBeforeDurable = false
   private dbPathRecoveryAttempt = 0
   /** A late path recovery whose hole is not reported yet; the next reader
    *  start reports it (see openDurableAfterRecovery). */
@@ -257,6 +275,10 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     super()
     this.launch = options.launch
     this.dbPath = options.launch.dbPath
+    if (!this.dbPath && options.launch.dbPathPending) {
+      this.dbPathPending = options.launch.dbPathPending
+      this.durableGateOpen = false
+    }
     this.now = options.now ?? Date.now
     // Subscribes to the PTY's exit immediately; an exit before `start()` is
     // latched there and delivered by `start()` (see PtyBinding).
@@ -372,7 +394,7 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     return submitLivePrompt(client, text, {
       sessionID: this.launch.sessionID,
       timeoutMs,
-      state: () => this.isClosed() ? 'closed' : this.stream?.isConnected() && this.reconciled ? 'ready' : 'waiting',
+      state: () => this.isClosed() ? 'closed' : this.stream?.isConnected() && this.reconciled && this.durableGateOpen ? 'ready' : 'waiting',
       subscribe: check => {
         this.liveReadinessWaiters.add(check)
         return () => this.liveReadinessWaiters.delete(check)
@@ -482,6 +504,38 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     // stop or exit that raced it.
     if (this.isClosed()) return
     const dbPath = this.dbPath
+    if (!dbPath && this.dbPathPending) {
+      // The launch's own lookup is still running (agent-code#1114). Wait for
+      // it quietly: a normal cold lookup takes 0.4-2 s, and reporting
+      // `db_path_retrying` for it would flash a banner on every pane.
+      const pending = this.dbPathPending
+      this.dbPathPending = null
+      pending.then(
+        path => {
+          if (this.isClosed()) return
+          if (!path) {
+            this.dbPathPendingError = 'OpenCode database path lookup returned no path'
+            this.openDurableGate()
+            this.recoverDbPath()
+            return
+          }
+          this.dbPath = path
+          // Committed rows the reader cannot see: name them (see the field).
+          if (this.turnStartedBeforeDurable) this.lateRecoveryUnreported = true
+          this.openDurable()
+          this.openDurableGate()
+        },
+        (error: unknown) => {
+          if (this.isClosed()) return
+          this.dbPathPendingError = error instanceof Error ? error.message : String(error)
+          // Delivering is the product. A dark channel is reported by the
+          // ladder below, and it must not also cost the user the prompt.
+          this.openDurableGate()
+          this.recoverDbPath()
+        },
+      )
+      return
+    }
     if (!dbPath) {
       this.recoverDbPath()
       return
@@ -571,7 +625,7 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     // renderer can supersede; the permanent code is emitted only once the
     // ladder is spent and the claim is true again.
     if (this.dbPathRecoveryAttempt === 0) {
-      const detail = this.launch.dbPathError ?? 'OpenCode database path is unavailable'
+      const detail = this.dbPathPendingError ?? this.launch.dbPathError ?? 'OpenCode database path is unavailable'
       if (willRetry) this.reportError('durable', 'db_path_retrying', `${detail}. Retrying in the background; this pane has no committed transcript until it succeeds.`)
       else this.reportError('durable', 'db_path_unavailable', detail)
       // `reportError` hands control to the host, which may stop this instance
@@ -668,7 +722,10 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   private reportLateRecovery(): void {
     if (!this.lateRecoveryUnreported) return
     this.lateRecoveryUnreported = false
-    this.reportError('durable', 'db_path_recovered_late', `OpenCode's committed stream is being read again, but anything committed while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'}) is missing from this pane's transcript. Reload the session to re-read it.`)
+    const when = this.dbPathRecoveryAttempt === 0
+      ? 'while the database path was still being looked up after launch'
+      : `while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'})`
+    this.reportError('durable', 'db_path_recovered_late', `OpenCode's committed stream is being read again, but anything committed ${when} is missing from this pane's transcript. Reload the session to re-read it.`)
   }
 
   private scheduleDurableOpen(): void {
@@ -822,12 +879,19 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     for (const check of [...this.liveReadinessWaiters]) check()
   }
 
+  private openDurableGate(): void {
+    if (this.durableGateOpen) return
+    this.durableGateOpen = true
+    this.notifyLiveReadiness()
+  }
+
   /**
    * Hand projector outputs on. WHY a session switch bypasses the sequencer:
    * it is detection only and changes no turn, request or durable state, so
    * there is nothing to order it against (see LiveOutput 'session-switched').
    */
   private routeLiveOutputs(outputs: readonly LiveOutput[]): void {
+    if (!this.durableGateOpen && outputs.some(output => output.kind === 'turn-start')) this.turnStartedBeforeDurable = true
     const ordered: LiveOutput[] = []
     for (const output of outputs) {
       if (output.kind !== 'session-switched') ordered.push(output)

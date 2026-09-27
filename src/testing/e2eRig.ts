@@ -65,6 +65,13 @@ export type RigOverrides = {
   /** Host-owned db-path re-resolution, and the ladder it is attempted on (#1114). */
   resolveDbPath?: () => Promise<string>
   dbPathRetryDelaysMs?: readonly number[]
+  /**
+   * The launch's own lookup still in flight (agent-code#1114), as
+   * `prepareOpencodeTerminalLaunch` now returns it. Given the rig's real
+   * database path, so a test can release it when it chooses. Implies
+   * `dbPath: null` at launch.
+   */
+  dbPathPending?: (dbPath: string) => Promise<string>
   resyncRetryMs?: number
   /**
    * Share an existing rig's database: same SQLite file and writer, but a new
@@ -133,7 +140,8 @@ export function useReplayRigs(): {
       env: {},
       sessionID: recording.sessionID,
       server: { url: overrides.url ?? server.url, username: RIG_USER, password: overrides.password ?? RIG_PASSWORD },
-      dbPath: overrides.dbPath === undefined ? dbPath : overrides.dbPath,
+      dbPath: overrides.dbPathPending ? null : overrides.dbPath === undefined ? dbPath : overrides.dbPath,
+      ...(overrides.dbPathPending ? { dbPathPending: overrides.dbPathPending(dbPath) } : {}),
     }
     const pty = new FakePty()
     const headless = new OpencodeTerminalHeadless({

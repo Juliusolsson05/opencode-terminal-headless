@@ -42,6 +42,32 @@ describe('OpencodeTerminalHeadless.submitPrompt', () => {
     expect(r.pty.writes).toEqual([])
   })
 
+  // agent-code#1114: the TUI is spawned before the database path is known,
+  // and the reader positions at the session's head when it opens. A prompt
+  // delivered before then would be committed and dropped, so delivery waits
+  // for the launch's lookup to land (bounded by the usual deadline).
+  it('holds programmatic delivery until the launch\'s pending lookup has landed', async () => {
+    let release!: () => void
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    let settled = false
+    const delivery = r.headless.submitPrompt('after the lookup', { timeoutMs: 3000 }).then(result => { settled = true; return result })
+    await new Promise(resolve => setTimeout(resolve, 100))
+    expect(settled).toBe(false)
+    expect(r.server.calls.filter(call => call.method === 'POST')).toEqual([])
+    release()
+    expect(await delivery).toEqual({ ok: true })
+    expect(r.server.calls.filter(call => call.method === 'POST')).toHaveLength(1)
+  })
+
+  it('still delivers when the launch\'s pending lookup fails: the dark channel is reported separately', async () => {
+    const r = await rig(recording, { dbPathPending: () => Promise.reject(new Error('lookup failed')) })
+    await startConnected(r)
+    expect(await r.headless.submitPrompt('despite the lookup', { timeoutMs: 3000 })).toEqual({ ok: true })
+  })
+
   it('omits what the session never chose, and never forwards the "default" variant sentinel', async () => {
     // `setAgentModel` writes `variant ?? "default"`, so "default" means "no
     // variant". Forwarding it literally would pin the turn to a variant by

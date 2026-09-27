@@ -203,6 +203,73 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
   // the pane its committed stream until the app was restarted. These pin the
   // recovery on the real path: a real SQLite file, a real replay, and the
   // recording's own rows as the oracle.
+  // agent-code#1114, the launch no longer waits for `opencode db path`. The
+  // lookup runs beside the TUI and the durable channel opens when it lands.
+  it('opens the durable channel once the launch\'s pending lookup lands, with no diagnostic before it', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    // A normal cold lookup takes 0.4-2 s. It must not flash "retrying".
+    await settle()
+    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
+    release()
+    await settle()
+    await replay(r, buildReplayScript(recording))
+    await waitUntil(() => r.log.filter(e => e.kind === 'entry').length >= expectedCommits(recording).ids.size, 3000, 'committed rows')
+    expect(new Set(r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id))).toEqual(expectedCommits(recording).ids)
+    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
+  })
+
+  // The window the old order closed by construction: rows committed before the
+  // reader positions are invisible to it. A turn seen live in that window is
+  // named through the existing late-recovery report, never dropped silently.
+  it('names what a turn started before the pending lookup landed committed', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+    const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
+    expect(errors.map(e => e.error.code)).toEqual(['db_path_recovered_late'])
+    expect(errors[0]?.error.message).toContain('while the database path was still being looked up after launch')
+  })
+
+  it('reports and recovers through the ladder when the launch\'s pending lookup fails', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, {
+      dbPathPending: () => Promise.reject(new Error('opencode db path timed out after 20000 ms')),
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: async () => r.dbPath,
+    })
+    await startConnected(r)
+    await waitUntil(() => r.log.filter(e => e.kind === 'error').length >= 2, 3000, 'retry then recovery')
+    const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
+    expect(errors[0]?.error.code).toBe('db_path_retrying')
+    expect(errors[0]?.error.message).toContain('opencode db path timed out after 20000 ms')
+  })
+
+  it('opens no store when stopped while the launch\'s lookup is pending', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    let opened = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => { opened += 1; return openOpencodeStore(path) },
+    })
+    await startConnected(r)
+    await r.headless.stop()
+    release()
+    await settle()
+    expect(opened).toBe(0)
+  })
+
   it('names the rows it lost when the database path arrives late', async () => {
     // #1114 review R1-F1/R2-F2. The headline recovery test below replays only
     // AFTER the retry lands, which is the one ordering in which completeness is
