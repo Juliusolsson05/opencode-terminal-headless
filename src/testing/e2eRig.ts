@@ -72,6 +72,11 @@ export type RigOverrides = {
    * `dbPath: null` at launch.
    */
   dbPathPending?: (dbPath: string) => Promise<string>
+  /**
+   * The headless's clock. Replayed rows carry the RECORDING's creation times,
+   * so a test about "committed after launch" sets launch before them.
+   */
+  now?: () => number
   resyncRetryMs?: number
   /**
    * Share an existing rig's database: same SQLite file and writer, but a new
@@ -156,6 +161,7 @@ export function useReplayRigs(): {
       sseMaxBackoffMs: 80,
       resyncRetryMs: overrides.resyncRetryMs ?? 20,
       ...(overrides.openStore ? { openStore: overrides.openStore } : {}),
+      ...(overrides.now ? { now: overrides.now } : {}),
       ...(overrides.resolveDbPath ? { resolveDbPath: overrides.resolveDbPath } : {}),
       ...(overrides.dbPathRetryDelaysMs ? { dbPathRetryDelaysMs: overrides.dbPathRetryDelaysMs } : {}),
     })

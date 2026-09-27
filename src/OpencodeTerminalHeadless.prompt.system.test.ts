@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { startConnected, useReplayRigs } from './testing/e2eRig.js'
 import { loadLiveFixture } from './testing/fixtures.js'
 import { waitUntil } from './testing/replay.js'
+import { openOpencodeStore, OpencodeStoreError } from './transcript/OpencodeStore.js'
 
 // The server's recorded request is the oracle, not a client-side builder.
 // Installed 1.18.30's prompt_async path owns sessionID in the URL; the body
@@ -60,6 +61,30 @@ describe('OpencodeTerminalHeadless.submitPrompt', () => {
     release()
     expect(await delivery).toEqual({ ok: true })
     expect(r.server.calls.filter(call => call.method === 'POST')).toHaveLength(1)
+  })
+
+  // #10 review B1: the lookup landing is not the reader positioning. A BUSY
+  // first open defers it, and a prompt sent in that gap was dropped unseen.
+  it('keeps holding delivery through a BUSY first open until the reader positions', async () => {
+    let release!: () => void
+    let opens = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => {
+        opens += 1
+        if (opens === 1) throw new OpencodeStoreError('busy', 'database is locked')
+        return openOpencodeStore(path)
+      },
+    })
+    await startConnected(r)
+    let settled = false
+    const delivery = r.headless.submitPrompt('after positioning', { timeoutMs: 3000 }).then(result => { settled = true; return result })
+    release()
+    await waitUntil(() => opens >= 1, 1000, 'first (busy) open')
+    expect(settled).toBe(false)
+    expect(r.server.calls.filter(call => call.method === 'POST')).toEqual([])
+    expect(await delivery).toEqual({ ok: true })
+    expect(opens).toBeGreaterThanOrEqual(2)
   })
 
   it('still delivers when the launch\'s pending lookup fails: the dark channel is reported separately', async () => {

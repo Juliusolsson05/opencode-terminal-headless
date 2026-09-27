@@ -223,13 +223,16 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(r.log.filter(e => e.kind === 'error')).toEqual([])
   })
 
-  // The window the old order closed by construction: rows committed before the
-  // reader positions are invisible to it. A turn seen live in that window is
-  // named through the existing late-recovery report, never dropped silently.
-  it('names what a turn started before the pending lookup landed committed', async () => {
+  // The window the old order closed by construction: rows committed after
+  // launch but before the reader positions are behind its starting head. They
+  // are named through the existing late-recovery report, never dropped
+  // silently. `now: () => 0` puts the launch before the recording's own
+  // creation times, as it is in real life.
+  it('names what was committed before the pending lookup landed', async () => {
     const recording = loadLiveFixture('plain.json')
     let release!: () => void
     const r = await rig(recording, {
+      now: () => 0,
       dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
     })
     await startConnected(r)
@@ -239,6 +242,22 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
     expect(errors.map(e => e.error.code)).toEqual(['db_path_recovered_late'])
     expect(errors[0]?.error.message).toContain('while the database path was still being looked up after launch')
+  })
+
+  // #10 review B2: a turn that ran and finished before `/event` came up left no
+  // live trace at all. The database still shows it.
+  it('names a turn committed before the live stream ever connected', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      now: () => 0,
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    r.server.setRefusing(true)
+    await r.headless.start()
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
   })
 
   it('reports and recovers through the ladder when the launch\'s pending lookup fails', async () => {
@@ -253,6 +272,16 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
     expect(errors[0]?.error.code).toBe('db_path_retrying')
     expect(errors[0]?.error.message).toContain('opencode db path timed out after 20000 ms')
+  })
+
+  // #10 review B (survivor): a lookup that "succeeds" with no path is a
+  // failure, reported, and it releases delivery.
+  it('treats an empty path from the launch\'s lookup as unavailable and releases delivery', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, { dbPathPending: async () => '' })
+    await startConnected(r)
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_unavailable'), 3000, 'unavailable report')
+    expect(await r.headless.submitPrompt('despite no path', { timeoutMs: 3000 })).toEqual({ ok: true })
   })
 
   it('opens no store when stopped while the launch\'s lookup is pending', async () => {

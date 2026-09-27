@@ -59,6 +59,13 @@ export type DurableReaderOptions = {
   onError: (error: DurableReaderError) => void
   pollIntervalMs?: number
   batchSize?: number
+  /**
+   * Called once, when the starting cursor has been read (which a BUSY read can
+   * defer). Until then everything committed is on the far side of a head the
+   * reader has not chosen yet; a host that must not commit rows into that
+   * window waits for this (agent-code#1114).
+   */
+  onPositioned?: () => void
 }
 
 // WHY 100 ms between retries: BUSY beside a live writer lasts as long as one
@@ -162,6 +169,7 @@ export class DurableReader {
     this.positioned = true
     this.previousPollCursor = this.cursor
     if (!this.liveConnected) this.startPoll()
+    this.options.onPositioned?.()
   }
 
   /** Coalesced wake-up: many bus events in one tick cause one read. */

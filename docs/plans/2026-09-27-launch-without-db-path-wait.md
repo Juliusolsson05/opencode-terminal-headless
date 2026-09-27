@@ -40,3 +40,14 @@ Package tests drive the real headless with a fake PTY and store. The app side is
 
 ## Out of scope
 - The lookup's 20 s budget itself, and the resolver's memo; both are unchanged.
+
+## Review round 1
+- **b (blocker): the delivery gate opened when the lookup LANDED, not when the reader POSITIONED.** A BUSY first open, or a BUSY cursor read, deferred positioning, and a prompt sent in that gap was committed and skipped with no report.
+  - `DurableReader` gains `onPositioned`, and the gate opens there.
+  - It also opens on a permanent durable failure (a refused database, a reader error, a failed or empty lookup): delivering is the product, and a dark channel is reported on its own.
+  - Test: a BUSY first open keeps delivery held until the retry positions.
+- **b (major): the `turn-start` heuristic missed a turn that ran and finished before `/event` came up.**
+  - **Ruling:** use database truth instead of live events. When the reader positions after a pending lookup, the newest message's `time.created` is compared with the launch time (the headless's clock at construction, right after spawn). Anything created at or after launch was committed in the window and is named through `db_path_recovered_late`. An unreadable check is reported too, since the gap cannot be ruled out.
+  - The `turn-start` tracking is removed.
+  - Tests use the headless's injectable `now`, because replayed rows carry the recording's times.
+- **b (survivor):** an empty path from the pending lookup is reported as unavailable and releases delivery; pinned.

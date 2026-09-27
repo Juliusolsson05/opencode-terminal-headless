@@ -242,13 +242,22 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   // nothing has been committed since spawn. The lookup used to finish before
   // the TUI existed, which made it true by construction. Now it runs alongside
   // the TUI, so a prompt delivered before the reader positions would be
-  // committed and dropped. True once the initial lookup has settled and the
-  // first open was attempted (or there was no lookup to wait for).
+  // committed and dropped.
+  //
+  // True once the reader has actually POSITIONED (not merely once the lookup
+  // landed: a BUSY open or a BUSY cursor read defers positioning, and a prompt
+  // sent in that gap was dropped with no report; #10 review B1). Also true on
+  // a permanent durable failure, because delivering is the product and the
+  // dark channel is reported on its own. True from the start when the launch
+  // carried no pending lookup.
   private durableGateOpen = true
-  // A turn started (the user typed into the painted TUI) while the gate was
-  // still closed: the eventual open cannot see what it committed, so it says
-  // so through the existing late-recovery report.
-  private turnStartedBeforeDurable = false
+  // Set when the path came from the launch's pending lookup. The first
+  // positioning then checks whether anything was committed after launch,
+  // i.e. in the window it could not see (see onReaderPositioned).
+  private checkLaunchWindowOnPosition = false
+  // When the TUI was launched (this instance is built right after the PTY is
+  // spawned). The window check compares message creation times with it.
+  private readonly launchedAt: number
   private dbPathRecoveryAttempt = 0
   /** A late path recovery whose hole is not reported yet; the next reader
    *  start reports it (see openDurableAfterRecovery). */
@@ -275,6 +284,7 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     super()
     this.launch = options.launch
     this.dbPath = options.launch.dbPath
+    this.launchedAt = (options.now ?? Date.now)()
     if (!this.dbPath && options.launch.dbPathPending) {
       this.dbPathPending = options.launch.dbPathPending
       this.durableGateOpen = false
@@ -520,10 +530,10 @@ export class OpencodeTerminalHeadless extends EventEmitter {
             return
           }
           this.dbPath = path
-          // Committed rows the reader cannot see: name them (see the field).
-          if (this.turnStartedBeforeDurable) this.lateRecoveryUnreported = true
+          // The gate opens when the reader positions (onReaderPositioned), not
+          // here: the open can still be BUSY.
+          this.checkLaunchWindowOnPosition = true
           this.openDurable()
-          this.openDurableGate()
         },
         (error: unknown) => {
           if (this.isClosed()) return
@@ -552,6 +562,9 @@ export class OpencodeTerminalHeadless extends EventEmitter {
       }
       const code = error instanceof OpencodeStoreError ? error.code : 'open_failed'
       this.reportError('durable', code, error instanceof Error ? error.message : String(error))
+      // A refused database is a dark channel, reported above. It must not
+      // also cost the user the prompt.
+      this.openDurableGate()
       return
     }
     // Assigned before `start()`: starting can report a failure to the host
@@ -562,7 +575,11 @@ export class OpencodeTerminalHeadless extends EventEmitter {
       sessionID: this.launch.sessionID,
       pollIntervalMs: this.options.durablePollIntervalMs,
       onRecords: records => this.sequencer.onDurableRecords(records),
-      onError: error => this.reportError('durable', error.code, error.message),
+      onError: error => {
+        this.reportError('durable', error.code, error.message)
+        this.openDurableGate()
+      },
+      onPositioned: () => this.onReaderPositioned(),
     })
     this.reader = reader
     reader.start()
@@ -879,6 +896,36 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     for (const check of [...this.liveReadinessWaiters]) check()
   }
 
+  /**
+   * The reader has chosen its starting head. If the path came from the
+   * launch's pending lookup, anything OpenCode committed between launch and
+   * now is behind that head and will never be tailed (agent-code#1114).
+   *
+   * WHY message creation times, not live events (#10 review B2): the live
+   * stream only sees a turn if it was connected when the turn ran. A turn the
+   * user typed into the painted TUI before `/event` came up, completed and went
+   * idle, left no live trace at all. The database is the truth: a message
+   * created at or after launch was committed in the window. If the check
+   * cannot be read, the gap cannot be ruled out, so it is reported.
+   */
+  private onReaderPositioned(): void {
+    if (this.checkLaunchWindowOnPosition) {
+      this.checkLaunchWindowOnPosition = false
+      let committedInWindow: boolean
+      try {
+        const newest = this.store?.readHistory(this.launch.sessionID, { limit: 1 }).records.at(-1)
+        committedInWindow = newest !== undefined && newest.info.time.created >= this.launchedAt
+      } catch {
+        committedInWindow = true
+      }
+      if (committedInWindow) {
+        this.lateRecoveryUnreported = true
+        this.reportLateRecovery()
+      }
+    }
+    this.openDurableGate()
+  }
+
   private openDurableGate(): void {
     if (this.durableGateOpen) return
     this.durableGateOpen = true
@@ -891,7 +938,6 @@ export class OpencodeTerminalHeadless extends EventEmitter {
    * there is nothing to order it against (see LiveOutput 'session-switched').
    */
   private routeLiveOutputs(outputs: readonly LiveOutput[]): void {
-    if (!this.durableGateOpen && outputs.some(output => output.kind === 'turn-start')) this.turnStartedBeforeDurable = true
     const ordered: LiveOutput[] = []
     for (const output of outputs) {
       if (output.kind !== 'session-switched') ordered.push(output)
