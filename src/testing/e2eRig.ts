@@ -77,6 +77,8 @@ export type RigOverrides = {
    * so a test about "committed after launch" sets launch before them.
    */
   now?: () => number
+  /** A PTY that offers no data subscription (the proof is then unavailable). */
+  ptyWithoutData?: boolean
   resyncRetryMs?: number
   /**
    * Share an existing rig's database: same SQLite file and writer, but a new
@@ -149,6 +151,7 @@ export function useReplayRigs(): {
       ...(overrides.dbPathPending ? { dbPathPending: overrides.dbPathPending(dbPath) } : {}),
     }
     const pty = new FakePty()
+    if (overrides.ptyWithoutData) Object.defineProperty(pty, 'onData', { value: undefined })
     const headless = new OpencodeTerminalHeadless({
       pty,
       cwd: '/sandbox/project',

@@ -273,6 +273,7 @@ export class FakePty implements PtyLike {
   readonly writes: string[] = []
   readonly sizes: Array<[number, number]> = []
   private exitListeners = new Set<(event: { exitCode: number; signal?: number }) => void>()
+  private dataListeners = new Set<(data: string) => void>()
 
   write(data: string): void {
     this.writes.push(data)
@@ -285,6 +286,16 @@ export class FakePty implements PtyLike {
   onExit(listener: (event: { exitCode: number; signal?: number }) => void): PtyDisposable {
     this.exitListeners.add(listener)
     return { dispose: () => this.exitListeners.delete(listener) }
+  }
+
+  onData(listener: (data: string) => void): PtyDisposable {
+    this.dataListeners.add(listener)
+    return { dispose: () => this.dataListeners.delete(listener) }
+  }
+
+  /** The TUI painting: its first output is what lets it take input. */
+  output(data = '\u001b[?1049h'): void {
+    for (const listener of [...this.dataListeners]) listener(data)
   }
 
   exit(exitCode = 0, signal?: number): void {

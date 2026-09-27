@@ -51,3 +51,12 @@ Package tests drive the real headless with a fake PTY and store. The app side is
   - The `turn-start` tracking is removed.
   - Tests use the headless's injectable `now`, because replayed rows carry the recording's times.
 - **b (survivor):** an empty path from the pending lookup is reported as unavailable and releases delivery; pinned.
+
+## Verification a/b and steering q94: the ordering source
+- **The message-time check was not a proof.** Verification a and b reproduced silent loss at `9b26347`. A message created before launch can be updated and completed inside the window, and a clock can step backwards; either way `time.created < launch` suppressed the report. The BUSY gate repair held.
+- **Ruling: the TUI's first PTY output is the ordering source.** OpenCode commits a message only once its TUI takes input, and it takes input only after it has painted. Programmatic delivery is gated separately. So "the reader positioned before the first output" is an in-process, ordered fact that nothing was committed behind the head: complete, no report. Positioning after the first output means a gap is possible and is reported through `db_path_recovered_late`, with wording that says "may be missing". Agent Code's #1117 handler re-reads history on it, admitting only rows it does not hold, so a possible gap costs one history read and never a silent loss.
+  - `PtyLike.onData` is optional (node-pty has it). Without it the proof is unavailable, so the gap is reported.
+  - Cost: in a restore storm, where the lookup outlasts the TUI's boot, the report fires even when nothing was typed. With a warm memo, the lookup lands in microtasks, before any paint, so the common case is silent.
+  - Considered and rejected: a persisted cursor or message baseline read before the TUI can write. It needs the database path, which is exactly the slow lookup. Deriving the path without the CLI is rejected in `dbPath.ts`.
+- **Pinned in real SQLite:** a painted TUI then a replayed turn; the same with the launch clock after every row (the pre-launch-message and backward-clock shapes q94 names); a turn with `/event` refused throughout; a PTY without `onData`; delivery held through a BUSY open and through a BUSY positioning read.
+- **Residual (unchanged from before this PR):** a second writer on a resumed session can commit between the host's history load and a BUSY-deferred positioning. `DurableReader` documents it.

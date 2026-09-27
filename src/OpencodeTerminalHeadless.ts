@@ -252,12 +252,9 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   // carried no pending lookup.
   private durableGateOpen = true
   // Set when the path came from the launch's pending lookup. The first
-  // positioning then checks whether anything was committed after launch,
-  // i.e. in the window it could not see (see onReaderPositioned).
+  // positioning then decides whether anything COULD have been committed after
+  // launch, i.e. in the window it cannot see (see onReaderPositioned).
   private checkLaunchWindowOnPosition = false
-  // When the TUI was launched (this instance is built right after the PTY is
-  // spawned). The window check compares message creation times with it.
-  private readonly launchedAt: number
   private dbPathRecoveryAttempt = 0
   /** A late path recovery whose hole is not reported yet; the next reader
    *  start reports it (see openDurableAfterRecovery). */
@@ -284,7 +281,6 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     super()
     this.launch = options.launch
     this.dbPath = options.launch.dbPath
-    this.launchedAt = (options.now ?? Date.now)()
     if (!this.dbPath && options.launch.dbPathPending) {
       this.dbPathPending = options.launch.dbPathPending
       this.durableGateOpen = false
@@ -742,10 +738,13 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   private reportLateRecovery(): void {
     if (!this.lateRecoveryUnreported) return
     this.lateRecoveryUnreported = false
-    const when = this.dbPathRecoveryAttempt === 0
-      ? 'while the database path was still being looked up after launch'
-      : `while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'})`
-    this.reportError('durable', 'db_path_recovered_late', `OpenCode's committed stream is being read again, but anything committed ${when} is missing from this pane's transcript. Reload the session to re-read it.`)
+    // Attempt 0 is the launch window (agent-code#1114), where the gap is
+    // POSSIBLE rather than proven: the TUI was able to take input before the
+    // reader positioned. The ladder's case is a proven dark window.
+    const message = this.dbPathRecoveryAttempt === 0
+      ? 'OpenCode\'s committed stream is being read, but the TUI could take input before the database path was known after launch, so anything committed then may be missing from this pane\'s transcript. Reload the session to re-read it.'
+      : `OpenCode's committed stream is being read again, but anything committed while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'}) is missing from this pane's transcript. Reload the session to re-read it.`
+    this.reportError('durable', 'db_path_recovered_late', message)
   }
 
   private scheduleDurableOpen(): void {
@@ -904,24 +903,25 @@ export class OpencodeTerminalHeadless extends EventEmitter {
    * launch's pending lookup, anything OpenCode committed between launch and
    * now is behind that head and will never be tailed (agent-code#1114).
    *
-   * WHY message creation times, not live events (#10 review B2): the live
-   * stream only sees a turn if it was connected when the turn ran. A turn the
-   * user typed into the painted TUI before `/event` came up, completed and went
-   * idle, left no live trace at all. The database is the truth: a message
-   * created at or after launch was committed in the window. If the check
-   * cannot be read, the gap cannot be ruled out, so it is reported.
+   * WHY the TUI's first output decides it, not message times (steering q94;
+   * #10 verification a and b reproduced silent loss with the time check): a
+   * message created before launch can be updated and completed inside the
+   * window, and a clock can step backwards, so `time.created` cannot prove
+   * that nothing was committed. What can: nothing is committed before the TUI
+   * takes input, and it takes input only after it has painted. Positioning
+   * before the first output is therefore complete; after it (or when the PTY
+   * cannot tell us), a gap is POSSIBLE and is reported as such. The host
+   * heals it by re-reading history, which admits only rows it does not hold
+   * (Agent Code #1117).
+   *
+   * Cost: in a restore storm, where the lookup outlasts the TUI's boot, the
+   * report fires even when the user typed nothing, and the host does one
+   * history read it did not need. Silence would be cheaper and wrong.
    */
   private onReaderPositioned(): void {
     if (this.checkLaunchWindowOnPosition) {
       this.checkLaunchWindowOnPosition = false
-      let committedInWindow: boolean
-      try {
-        const newest = this.store?.readHistory(this.launch.sessionID, { limit: 1 }).records.at(-1)
-        committedInWindow = newest !== undefined && newest.info.time.created >= this.launchedAt
-      } catch {
-        committedInWindow = true
-      }
-      if (committedInWindow) {
+      if (this.binding.outputSeen() !== false) {
         this.lateRecoveryUnreported = true
         this.reportLateRecovery()
       }

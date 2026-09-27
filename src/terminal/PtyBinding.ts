@@ -18,6 +18,11 @@ export type PtyLike = {
   write(data: string): void
   resize(cols: number, rows: number): void
   onExit(listener: (event: PtyExitEvent) => void): PtyDisposable
+  /**
+   * Optional (node-pty has it). The binding only notes that the TUI produced
+   * its FIRST output, never the bytes: see `outputSeen` (agent-code#1114).
+   */
+  onData?(listener: (data: string) => void): PtyDisposable
 }
 
 export class PtyBinding {
@@ -26,6 +31,8 @@ export class PtyBinding {
   private listener: ((event: PtyExitEvent) => void) | null = null
   private delivered = false
   private detached = false
+  private dataSubscription: PtyDisposable | null = null
+  private firstOutput = false
 
   /**
    * Subscribes to the PTY's exit AT ONCE, not when the owner starts.
@@ -44,6 +51,33 @@ export class PtyBinding {
     // latched it, and the subscription is released here instead.
     if (this.exitEvent) subscription.dispose()
     else this.subscription = subscription
+    // Only the first output matters, so the subscription is dropped on it.
+    this.dataSubscription = pty.onData?.(() => {
+      this.firstOutput = true
+      this.dataSubscription?.dispose()
+      this.dataSubscription = null
+    }) ?? null
+    if (this.firstOutput) {
+      this.dataSubscription?.dispose()
+      this.dataSubscription = null
+    }
+  }
+
+  /**
+   * Has the TUI produced any output yet? `'unknown'` when the PTY offers no
+   * data subscription.
+   *
+   * WHY this is the ordering source for the launch window (agent-code#1114,
+   * steering q94): OpenCode commits a message only once its TUI takes input,
+   * and it takes input only after it has painted; programmatic delivery is
+   * held separately. So "no output yet" is an in-process, ordered fact that
+   * nothing can have been committed. A wall-clock message time is not: a
+   * message created before launch can still be updated and completed later,
+   * and clocks step backwards (#10 verification a and b).
+   */
+  outputSeen(): boolean | 'unknown' {
+    if (this.firstOutput) return true
+    return this.pty.onData ? false : 'unknown'
   }
 
   /**
@@ -63,6 +97,8 @@ export class PtyBinding {
     this.listener = null
     this.subscription?.dispose()
     this.subscription = null
+    this.dataSubscription?.dispose()
+    this.dataSubscription = null
   }
 
   isExited(): boolean {

@@ -87,6 +87,36 @@ describe('OpencodeTerminalHeadless.submitPrompt', () => {
     expect(opens).toBeGreaterThanOrEqual(2)
   })
 
+  // #10 verification a: a BUSY first POSITIONING read (the store opened fine)
+  // also defers the reader; delivery waits for it too.
+  it('keeps holding delivery through a BUSY first positioning read', async () => {
+    let release!: () => void
+    let reads = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        const read = store.read.bind(store)
+        return Object.assign(store, {
+          read: <T,>(fn: Parameters<typeof read<T>>[0]): T => {
+            reads += 1
+            if (reads === 1) throw new OpencodeStoreError('busy', 'database is locked')
+            return read(fn)
+          },
+        })
+      },
+    })
+    await startConnected(r)
+    let settled = false
+    const delivery = r.headless.submitPrompt('after positioning', { timeoutMs: 3000 }).then(result => { settled = true; return result })
+    release()
+    await waitUntil(() => reads >= 1, 1000, 'first (busy) positioning read')
+    expect(settled).toBe(false)
+    expect(r.server.calls.filter(call => call.method === 'POST')).toEqual([])
+    expect(await delivery).toEqual({ ok: true })
+    expect(reads).toBeGreaterThanOrEqual(2)
+  })
+
   it('still delivers when the launch\'s pending lookup fails: the dark channel is reported separately', async () => {
     const r = await rig(recording, { dbPathPending: () => Promise.reject(new Error('lookup failed')) })
     await startConnected(r)

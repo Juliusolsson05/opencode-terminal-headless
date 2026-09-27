@@ -223,39 +223,72 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(r.log.filter(e => e.kind === 'error')).toEqual([])
   })
 
-  // The window the old order closed by construction: rows committed after
-  // launch but before the reader positions are behind its starting head. They
-  // are named through the existing late-recovery report, never dropped
-  // silently. `now: () => 0` puts the launch before the recording's own
-  // creation times, as it is in real life.
-  it('names what was committed before the pending lookup landed', async () => {
+  // The window the old order closed by construction: once the TUI has painted
+  // it can take input, so rows committed before the reader positions may be
+  // behind its starting head. That is reported, and the host re-reads
+  // history. The ordering source is the TUI's first output, not a message
+  // time (steering q94).
+  it('reports a possible gap when the TUI painted before the pending lookup landed', async () => {
     const recording = loadLiveFixture('plain.json')
     let release!: () => void
     const r = await rig(recording, {
-      now: () => 0,
       dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
     })
     await startConnected(r)
+    r.pty.output()
     await replay(r, buildReplayScript(recording))
     release()
     await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
     const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
     expect(errors.map(e => e.error.code)).toEqual(['db_path_recovered_late'])
-    expect(errors[0]?.error.message).toContain('while the database path was still being looked up after launch')
+    expect(errors[0]?.error.message).toContain('could take input before the database path was known after launch')
   })
 
-  // #10 review B2: a turn that ran and finished before `/event` came up left no
-  // live trace at all. The database still shows it.
-  it('names a turn committed before the live stream ever connected', async () => {
+  // #10 verification a/b: the time check was fooled by (1) a message created
+  // before launch and completed inside the window, and (2) a clock that
+  // stepped backwards. Neither matters now: a launch clock set AFTER every
+  // recorded row (the backward-step shape, and a pre-launch creation time for
+  // every message) still reports, because the TUI had painted.
+  it('reports regardless of message creation times (pre-launch messages, backward clock)', async () => {
     const recording = loadLiveFixture('plain.json')
     let release!: () => void
     const r = await rig(recording, {
-      now: () => 0,
+      now: () => Number.MAX_SAFE_INTEGER,
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    r.pty.output()
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+  })
+
+  // #10 review B2: a turn that ran and finished before `/event` came up left no
+  // live trace at all. The first output still says the TUI could take input.
+  it('reports a turn committed before the live stream ever connected', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
       dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
     })
     r.server.setRefusing(true)
     await r.headless.start()
+    r.pty.output()
     await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+  })
+
+  // Without a data subscription the ordering cannot be proven, so the gap is
+  // reported rather than assumed away.
+  it('reports a possible gap when the PTY cannot say whether the TUI painted', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      ptyWithoutData: true,
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
     release()
     await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
   })
