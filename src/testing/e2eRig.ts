@@ -65,6 +65,26 @@ export type RigOverrides = {
   /** Host-owned db-path re-resolution, and the ladder it is attempted on (#1114). */
   resolveDbPath?: () => Promise<string>
   dbPathRetryDelaysMs?: readonly number[]
+  /**
+   * The launch's own lookup still in flight (agent-code#1114), as
+   * `prepareOpencodeTerminalLaunch` now returns it. Given the rig's real
+   * database path, so a test can release it when it chooses. Implies
+   * `dbPath: null` at launch.
+   */
+  dbPathPending?: (dbPath: string) => Promise<string>
+  /**
+   * The headless's clock. Replayed rows carry the RECORDING's creation times,
+   * so a test about "committed after launch" sets launch before them.
+   */
+  now?: () => number
+  /**
+   * Pass no `tuiOutputSeen` latch (the proof is then unavailable). By default
+   * the rig latches the fake PTY's output at creation, before the headless
+   * exists, as a host does at spawn.
+   */
+  noOutputLatch?: boolean
+  /** Runs after the fake PTY is "spawned" and latched, before the headless is constructed. */
+  onSpawn?: (pty: FakePty) => void
   resyncRetryMs?: number
   /**
    * Share an existing rig's database: same SQLite file and writer, but a new
@@ -133,9 +153,14 @@ export function useReplayRigs(): {
       env: {},
       sessionID: recording.sessionID,
       server: { url: overrides.url ?? server.url, username: RIG_USER, password: overrides.password ?? RIG_PASSWORD },
-      dbPath: overrides.dbPath === undefined ? dbPath : overrides.dbPath,
+      dbPath: overrides.dbPathPending ? null : overrides.dbPath === undefined ? dbPath : overrides.dbPath,
+      ...(overrides.dbPathPending ? { dbPathPending: overrides.dbPathPending(dbPath) } : {}),
     }
     const pty = new FakePty()
+    // Latched at "spawn", before the headless is constructed, as a host does.
+    let tuiOutput = false
+    pty.onData(() => { tuiOutput = true })
+    overrides.onSpawn?.(pty)
     const headless = new OpencodeTerminalHeadless({
       pty,
       cwd: '/sandbox/project',
@@ -148,6 +173,8 @@ export function useReplayRigs(): {
       sseMaxBackoffMs: 80,
       resyncRetryMs: overrides.resyncRetryMs ?? 20,
       ...(overrides.openStore ? { openStore: overrides.openStore } : {}),
+      ...(overrides.now ? { now: overrides.now } : {}),
+      ...(overrides.noOutputLatch ? {} : { tuiOutputSeen: () => tuiOutput }),
       ...(overrides.resolveDbPath ? { resolveDbPath: overrides.resolveDbPath } : {}),
       ...(overrides.dbPathRetryDelaysMs ? { dbPathRetryDelaysMs: overrides.dbPathRetryDelaysMs } : {}),
     })

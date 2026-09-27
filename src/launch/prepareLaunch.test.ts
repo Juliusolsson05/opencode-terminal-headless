@@ -25,7 +25,7 @@ describe('prepareOpencodeTerminalLaunch', () => {
     expect(launch.env.OPENCODE_SERVER_USERNAME).toBe('opencode')
     expect(launch.args.join(' ')).not.toContain(launch.server.password)
     expect(launch.env.PATH).toBe('/bin')
-    expect(launch.dbPath).toBe('/data/opencode.db')
+    await expect(launch.dbPathPending).resolves.toBe('/data/opencode.db')
   })
 
   it('maps dangerous mode to OpenCode\'s --auto and nothing else', async () => {
@@ -41,10 +41,33 @@ describe('prepareOpencodeTerminalLaunch', () => {
     expect(a.server.password.length).toBeGreaterThanOrEqual(32)
   })
 
-  it('disables only the durable channel when the database path cannot be resolved', async () => {
-    const launch = await prepareOpencodeTerminalLaunch({ ...base, dangerousMode: false, resolveDbPath: async () => { throw new Error('opencode not installed') } })
+  // agent-code#1114: the launch does not wait for `opencode db path` (a Bun
+  // process with a 20 s budget that a restore storm has overrun). The TUI
+  // never needs the path; the headless awaits `dbPathPending` itself.
+  it('returns without waiting for the database-path lookup', async () => {
+    const launch = await Promise.race([
+      prepareOpencodeTerminalLaunch({ ...base, dangerousMode: false, resolveDbPath: () => new Promise<string>(() => {}) }),
+      new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 500)),
+    ])
+    expect(launch).not.toBe('hung')
+    if (launch === 'hung') return
     expect(launch.dbPath).toBeNull()
-    expect(launch.dbPathError).toContain('opencode not installed')
+    expect(launch.dbPathPending).toBeInstanceOf(Promise)
     expect(launch.args).toContain('--port')
+  })
+
+  it('hands a failed lookup to the headless as a rejected pending path, never an unhandled rejection', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason) }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const launch = await prepareOpencodeTerminalLaunch({ ...base, dangerousMode: false, resolveDbPath: () => { throw new Error('opencode not installed') } })
+      await new Promise(resolve => setTimeout(resolve, 20))
+      expect(unhandled).toEqual([])
+      await expect(launch.dbPathPending).rejects.toThrow('opencode not installed')
+      expect(launch.dbPath).toBeNull()
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 })

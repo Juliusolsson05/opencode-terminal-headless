@@ -79,6 +79,22 @@ export type OpencodeTerminalHeadlessOptions = {
   resolveDbPath?: () => Promise<string>
   /** Delays before each `resolveDbPath` attempt, and by their count how many. */
   dbPathRetryDelaysMs?: readonly number[]
+  /**
+   * Has the TUI produced any PTY output since it was SPAWNED? Latched by the
+   * host, which subscribes to the PTY's data at spawn (agent-code#1114).
+   *
+   * WHY the host and not this class (#10 recheck a and b): a data subscription
+   * does not replay, and this class is constructed some time after the spawn,
+   * so "no output since I subscribed" could not prove "no output since spawn".
+   * Only the caller that spawned the PTY can say that.
+   *
+   * WHY it matters: OpenCode commits a message only after its TUI takes input,
+   * and it takes input only after it has painted. So a reader that positions
+   * while this still says false cannot have missed anything. Without it (not
+   * passed), the answer is unknown, and a launch-window gap is reported as
+   * possible.
+   */
+  tuiOutputSeen?: () => boolean
   /** How long to wait for the TUI's server before reporting `server-unreachable`. */
   liveConnectDeadlineMs?: number
   heartbeatMs?: number
@@ -231,6 +247,30 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   // recoverable: `launch` is the immutable record of what the host prepared,
   // while this is what the durable channel should open right now.
   private dbPath: string | null = null
+  // The launch's database-path lookup, until `openDurable` takes it
+  // (agent-code#1114: the TUI is spawned without waiting for it).
+  private dbPathPending: Promise<string> | null = null
+  // Why the initial lookup failed, for the first recovery report.
+  private dbPathPendingError: string | null = null
+  // WHY programmatic delivery waits for this (agent-code#1114): the reader
+  // seeds from the session's CURRENT head when it positions, and treats every
+  // earlier row as history the host already has. That is right only while
+  // nothing has been committed since spawn. The lookup used to finish before
+  // the TUI existed, which made it true by construction. Now it runs alongside
+  // the TUI, so a prompt delivered before the reader positions would be
+  // committed and dropped.
+  //
+  // True once the reader has actually POSITIONED (not merely once the lookup
+  // landed: a BUSY open or a BUSY cursor read defers positioning, and a prompt
+  // sent in that gap was dropped with no report; #10 review B1). Also true on
+  // a permanent durable failure, because delivering is the product and the
+  // dark channel is reported on its own. True from the start when the launch
+  // carried no pending lookup.
+  private durableGateOpen = true
+  // Set when the path came from the launch's pending lookup. The first
+  // positioning then decides whether anything COULD have been committed after
+  // launch, i.e. in the window it cannot see (see onReaderPositioned).
+  private checkLaunchWindowOnPosition = false
   private dbPathRecoveryAttempt = 0
   /** A late path recovery whose hole is not reported yet; the next reader
    *  start reports it (see openDurableAfterRecovery). */
@@ -257,6 +297,10 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     super()
     this.launch = options.launch
     this.dbPath = options.launch.dbPath
+    if (!this.dbPath && options.launch.dbPathPending) {
+      this.dbPathPending = options.launch.dbPathPending
+      this.durableGateOpen = false
+    }
     this.now = options.now ?? Date.now
     // Subscribes to the PTY's exit immediately; an exit before `start()` is
     // latched there and delivered by `start()` (see PtyBinding).
@@ -372,7 +416,7 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     return submitLivePrompt(client, text, {
       sessionID: this.launch.sessionID,
       timeoutMs,
-      state: () => this.isClosed() ? 'closed' : this.stream?.isConnected() && this.reconciled ? 'ready' : 'waiting',
+      state: () => this.isClosed() ? 'closed' : this.stream?.isConnected() && this.reconciled && this.durableGateOpen ? 'ready' : 'waiting',
       subscribe: check => {
         this.liveReadinessWaiters.add(check)
         return () => this.liveReadinessWaiters.delete(check)
@@ -482,6 +526,38 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     // stop or exit that raced it.
     if (this.isClosed()) return
     const dbPath = this.dbPath
+    if (!dbPath && this.dbPathPending) {
+      // The launch's own lookup is still running (agent-code#1114). Wait for
+      // it quietly: a normal cold lookup takes 0.4-2 s, and reporting
+      // `db_path_retrying` for it would flash a banner on every pane.
+      const pending = this.dbPathPending
+      this.dbPathPending = null
+      pending.then(
+        path => {
+          if (this.isClosed()) return
+          if (!path) {
+            this.dbPathPendingError = 'OpenCode database path lookup returned no path'
+            this.openDurableGate()
+            this.recoverDbPath()
+            return
+          }
+          this.dbPath = path
+          // The gate opens when the reader positions (onReaderPositioned), not
+          // here: the open can still be BUSY.
+          this.checkLaunchWindowOnPosition = true
+          this.openDurable()
+        },
+        (error: unknown) => {
+          if (this.isClosed()) return
+          this.dbPathPendingError = error instanceof Error ? error.message : String(error)
+          // Delivering is the product. A dark channel is reported by the
+          // ladder below, and it must not also cost the user the prompt.
+          this.openDurableGate()
+          this.recoverDbPath()
+        },
+      )
+      return
+    }
     if (!dbPath) {
       this.recoverDbPath()
       return
@@ -498,6 +574,9 @@ export class OpencodeTerminalHeadless extends EventEmitter {
       }
       const code = error instanceof OpencodeStoreError ? error.code : 'open_failed'
       this.reportError('durable', code, error instanceof Error ? error.message : String(error))
+      // A refused database is a dark channel, reported above. It must not
+      // also cost the user the prompt.
+      this.openDurableGate()
       return
     }
     // Assigned before `start()`: starting can report a failure to the host
@@ -508,7 +587,11 @@ export class OpencodeTerminalHeadless extends EventEmitter {
       sessionID: this.launch.sessionID,
       pollIntervalMs: this.options.durablePollIntervalMs,
       onRecords: records => this.sequencer.onDurableRecords(records),
-      onError: error => this.reportError('durable', error.code, error.message),
+      onError: error => {
+        this.reportError('durable', error.code, error.message)
+        this.openDurableGate()
+      },
+      onPositioned: () => this.onReaderPositioned(),
     })
     this.reader = reader
     reader.start()
@@ -571,7 +654,10 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     // renderer can supersede; the permanent code is emitted only once the
     // ladder is spent and the claim is true again.
     if (this.dbPathRecoveryAttempt === 0) {
-      const detail = this.launch.dbPathError ?? 'OpenCode database path is unavailable'
+      // The pending lookup's own failure first: it is the newer and more
+      // specific reason. `launch.dbPathError` is for launches a host builds
+      // itself, which carry no pending lookup (och#10 review c).
+      const detail = this.dbPathPendingError ?? this.launch.dbPathError ?? 'OpenCode database path is unavailable'
       if (willRetry) this.reportError('durable', 'db_path_retrying', `${detail}. Retrying in the background; this pane has no committed transcript until it succeeds.`)
       else this.reportError('durable', 'db_path_unavailable', detail)
       // `reportError` hands control to the host, which may stop this instance
@@ -668,7 +754,13 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   private reportLateRecovery(): void {
     if (!this.lateRecoveryUnreported) return
     this.lateRecoveryUnreported = false
-    this.reportError('durable', 'db_path_recovered_late', `OpenCode's committed stream is being read again, but anything committed while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'}) is missing from this pane's transcript. Reload the session to re-read it.`)
+    // Attempt 0 is the launch window (agent-code#1114), where the gap is
+    // POSSIBLE rather than proven: the TUI was able to take input before the
+    // reader positioned. The ladder's case is a proven dark window.
+    const message = this.dbPathRecoveryAttempt === 0
+      ? 'OpenCode\'s committed stream is being read, but the TUI could take input before the database path was known after launch, so anything committed then may be missing from this pane\'s transcript. Reload the session to re-read it.'
+      : `OpenCode's committed stream is being read again, but anything committed while the database path was unavailable (${this.dbPathRecoveryAttempt} attempt${this.dbPathRecoveryAttempt === 1 ? '' : 's'}) is missing from this pane's transcript. Reload the session to re-read it.`
+    this.reportError('durable', 'db_path_recovered_late', message)
   }
 
   private scheduleDurableOpen(): void {
@@ -820,6 +912,45 @@ export class OpencodeTerminalHeadless extends EventEmitter {
 
   private notifyLiveReadiness(): void {
     for (const check of [...this.liveReadinessWaiters]) check()
+  }
+
+  /**
+   * The reader has chosen its starting head. If the path came from the
+   * launch's pending lookup, anything OpenCode committed between launch and
+   * now is behind that head and will never be tailed (agent-code#1114).
+   *
+   * WHY the TUI's first output decides it, not message times (steering q94;
+   * #10 verification a and b reproduced silent loss with the time check): a
+   * message created before launch can be updated and completed inside the
+   * window, and a clock can step backwards, so `time.created` cannot prove
+   * that nothing was committed. What can: nothing is committed before the TUI
+   * takes input, and it takes input only after it has painted. Positioning
+   * while the host's spawn-time latch (`tuiOutputSeen`) still says no output
+   * is therefore complete. After the first output, or with no latch, a gap is
+   * POSSIBLE and is reported as such. The host heals it by re-reading
+   * history, which admits only rows it does not hold (Agent Code #1117).
+   *
+   * Cost: in a restore storm, where the lookup outlasts the TUI's boot, the
+   * report fires even when the user typed nothing, and the host does one
+   * history read it did not need. Silence would be cheaper and wrong.
+   */
+  private onReaderPositioned(): void {
+    if (this.checkLaunchWindowOnPosition) {
+      this.checkLaunchWindowOnPosition = false
+      // Only a host-latched `false` proves nothing was committed; `true` and
+      // "not provided" both leave a gap possible.
+      if (this.options.tuiOutputSeen?.() !== false) {
+        this.lateRecoveryUnreported = true
+        this.reportLateRecovery()
+      }
+    }
+    this.openDurableGate()
+  }
+
+  private openDurableGate(): void {
+    if (this.durableGateOpen) return
+    this.durableGateOpen = true
+    this.notifyLiveReadiness()
   }
 
   /**

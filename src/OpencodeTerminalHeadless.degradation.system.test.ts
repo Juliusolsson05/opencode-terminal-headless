@@ -203,6 +203,151 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
   // the pane its committed stream until the app was restarted. These pin the
   // recovery on the real path: a real SQLite file, a real replay, and the
   // recording's own rows as the oracle.
+  // agent-code#1114, the launch no longer waits for `opencode db path`. The
+  // lookup runs beside the TUI and the durable channel opens when it lands.
+  it('opens the durable channel once the launch\'s pending lookup lands, with no diagnostic before it', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    // A normal cold lookup takes 0.4-2 s. It must not flash "retrying".
+    await settle()
+    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
+    release()
+    await settle()
+    await replay(r, buildReplayScript(recording))
+    await waitUntil(() => r.log.filter(e => e.kind === 'entry').length >= expectedCommits(recording).ids.size, 3000, 'committed rows')
+    expect(new Set(r.log.filter((e): e is Extract<LogEntry, { kind: 'entry' }> => e.kind === 'entry').map(e => e.record.info.id))).toEqual(expectedCommits(recording).ids)
+    expect(r.log.filter(e => e.kind === 'error')).toEqual([])
+  })
+
+  // The window the old order closed by construction: once the TUI has painted
+  // it can take input, so rows committed before the reader positions may be
+  // behind its starting head. That is reported, and the host re-reads
+  // history. The ordering source is the TUI's first output, not a message
+  // time (steering q94).
+  it('reports a possible gap when the TUI painted before the pending lookup landed', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    r.pty.output()
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+    const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
+    expect(errors.map(e => e.error.code)).toEqual(['db_path_recovered_late'])
+    expect(errors[0]?.error.message).toContain('could take input before the database path was known after launch')
+  })
+
+  // #10 verification a/b: the time check was fooled by (1) a message created
+  // before launch and completed inside the window, and (2) a clock that
+  // stepped backwards. Neither matters now: a launch clock set AFTER every
+  // recorded row (the backward-step shape, and a pre-launch creation time for
+  // every message) still reports, because the TUI had painted.
+  it('reports regardless of message creation times (pre-launch messages, backward clock)', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      now: () => Number.MAX_SAFE_INTEGER,
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    r.pty.output()
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+  })
+
+  // #10 review B2: a turn that ran and finished before `/event` came up left no
+  // live trace at all. The first output still says the TUI could take input.
+  it('reports a turn committed before the live stream ever connected', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    r.server.setRefusing(true)
+    await r.headless.start()
+    r.pty.output()
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+  })
+
+  // #10 recheck a and b: the TUI painted BEFORE the headless was constructed.
+  // A subscription made by the headless would have missed it; the host's
+  // spawn-time latch did not.
+  it('reports a gap when the TUI painted before the headless existed', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      onSpawn: pty => pty.output(),
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+  })
+
+  // Without the host's spawn-time latch the ordering cannot be proven, so the
+  // gap is reported rather than assumed away.
+  it('reports a possible gap when the host passes no output latch', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      noOutputLatch: true,
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+  })
+
+  it('reports and recovers through the ladder when the launch\'s pending lookup fails', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, {
+      dbPathPending: () => Promise.reject(new Error('opencode db path timed out after 20000 ms')),
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: async () => r.dbPath,
+    })
+    await startConnected(r)
+    await waitUntil(() => r.log.filter(e => e.kind === 'error').length >= 2, 3000, 'retry then recovery')
+    const errors = r.log.filter((e): e is Extract<LogEntry, { kind: 'error' }> => e.kind === 'error')
+    expect(errors[0]?.error.code).toBe('db_path_retrying')
+    expect(errors[0]?.error.message).toContain('opencode db path timed out after 20000 ms')
+  })
+
+  // #10 review B (survivor): a lookup that "succeeds" with no path is a
+  // failure, reported, and it releases delivery.
+  it('treats an empty path from the launch\'s lookup as unavailable and releases delivery', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, { dbPathPending: async () => '' })
+    await startConnected(r)
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_unavailable'), 3000, 'unavailable report')
+    expect(await r.headless.submitPrompt('despite no path', { timeoutMs: 3000 })).toEqual({ ok: true })
+  })
+
+  it('opens no store when stopped while the launch\'s lookup is pending', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    let opened = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => { opened += 1; return openOpencodeStore(path) },
+    })
+    await startConnected(r)
+    await r.headless.stop()
+    release()
+    await settle()
+    expect(opened).toBe(0)
+  })
+
   it('names the rows it lost when the database path arrives late', async () => {
     // #1114 review R1-F1/R2-F2. The headline recovery test below replays only
     // AFTER the retry lands, which is the one ordering in which completeness is

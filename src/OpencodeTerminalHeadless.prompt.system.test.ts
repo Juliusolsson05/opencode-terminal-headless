@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { startConnected, useReplayRigs } from './testing/e2eRig.js'
 import { loadLiveFixture } from './testing/fixtures.js'
 import { waitUntil } from './testing/replay.js'
+import { openOpencodeStore, OpencodeStoreError } from './transcript/OpencodeStore.js'
 
 // The server's recorded request is the oracle, not a client-side builder.
 // Installed 1.18.30's prompt_async path owns sessionID in the URL; the body
@@ -40,6 +41,86 @@ describe('OpencodeTerminalHeadless.submitPrompt', () => {
       authorized: true,
     }])
     expect(r.pty.writes).toEqual([])
+  })
+
+  // agent-code#1114: the TUI is spawned before the database path is known,
+  // and the reader positions at the session's head when it opens. A prompt
+  // delivered before then would be committed and dropped, so delivery waits
+  // for the launch's lookup to land (bounded by the usual deadline).
+  it('holds programmatic delivery until the launch\'s pending lookup has landed', async () => {
+    let release!: () => void
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    let settled = false
+    const delivery = r.headless.submitPrompt('after the lookup', { timeoutMs: 3000 }).then(result => { settled = true; return result })
+    await new Promise(resolve => setTimeout(resolve, 100))
+    expect(settled).toBe(false)
+    expect(r.server.calls.filter(call => call.method === 'POST')).toEqual([])
+    release()
+    expect(await delivery).toEqual({ ok: true })
+    expect(r.server.calls.filter(call => call.method === 'POST')).toHaveLength(1)
+  })
+
+  // #10 review B1: the lookup landing is not the reader positioning. A BUSY
+  // first open defers it, and a prompt sent in that gap was dropped unseen.
+  it('keeps holding delivery through a BUSY first open until the reader positions', async () => {
+    let release!: () => void
+    let opens = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => {
+        opens += 1
+        if (opens === 1) throw new OpencodeStoreError('busy', 'database is locked')
+        return openOpencodeStore(path)
+      },
+    })
+    await startConnected(r)
+    let settled = false
+    const delivery = r.headless.submitPrompt('after positioning', { timeoutMs: 3000 }).then(result => { settled = true; return result })
+    release()
+    await waitUntil(() => opens >= 1, 1000, 'first (busy) open')
+    expect(settled).toBe(false)
+    expect(r.server.calls.filter(call => call.method === 'POST')).toEqual([])
+    expect(await delivery).toEqual({ ok: true })
+    expect(opens).toBeGreaterThanOrEqual(2)
+  })
+
+  // #10 verification a: a BUSY first POSITIONING read (the store opened fine)
+  // also defers the reader; delivery waits for it too.
+  it('keeps holding delivery through a BUSY first positioning read', async () => {
+    let release!: () => void
+    let reads = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        const read = store.read.bind(store)
+        return Object.assign(store, {
+          read: <T,>(fn: Parameters<typeof read<T>>[0]): T => {
+            reads += 1
+            if (reads === 1) throw new OpencodeStoreError('busy', 'database is locked')
+            return read(fn)
+          },
+        })
+      },
+    })
+    await startConnected(r)
+    let settled = false
+    const delivery = r.headless.submitPrompt('after positioning', { timeoutMs: 3000 }).then(result => { settled = true; return result })
+    release()
+    await waitUntil(() => reads >= 1, 1000, 'first (busy) positioning read')
+    expect(settled).toBe(false)
+    expect(r.server.calls.filter(call => call.method === 'POST')).toEqual([])
+    expect(await delivery).toEqual({ ok: true })
+    expect(reads).toBeGreaterThanOrEqual(2)
+  })
+
+  it('still delivers when the launch\'s pending lookup fails: the dark channel is reported separately', async () => {
+    const r = await rig(recording, { dbPathPending: () => Promise.reject(new Error('lookup failed')) })
+    await startConnected(r)
+    expect(await r.headless.submitPrompt('despite the lookup', { timeoutMs: 3000 })).toEqual({ ok: true })
   })
 
   it('omits what the session never chose, and never forwards the "default" variant sentinel', async () => {

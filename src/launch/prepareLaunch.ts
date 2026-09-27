@@ -32,7 +32,9 @@ export type OpencodeTerminalLaunch = {
   sessionID: string
   server: { url: string; username: string; password: string }
   /**
-   * Null when the database path could not be resolved here.
+   * Null when the path is not known at launch: still being looked up (see
+   * `dbPathPending`, which `prepareOpencodeTerminalLaunch` always sets now), or
+   * could not be resolved.
    *
    * That is no longer the end of it: `OpencodeTerminalHeadless` retries the
    * lookup through its own `resolveDbPath` option and opens the channel late if
@@ -40,7 +42,23 @@ export type OpencodeTerminalLaunch = {
    * behaviour — the durable channel stays disabled and says so.
    */
   dbPath: string | null
+  /**
+   * Why the path is null, for a launch a host builds itself. Never set by
+   * `prepareOpencodeTerminalLaunch` since agent-code#1114: its failed lookup
+   * is a rejected `dbPathPending`, and the headless reports that reason.
+   */
   dbPathError?: string
+  /**
+   * The database-path lookup still in flight when the launch was returned
+   * (agent-code#1114). `prepareOpencodeTerminalLaunch` no longer waits for it:
+   * the TUI never needs the path, only the durable channel does, and a
+   * restore storm made the lookup (a ~143 MB Bun process, 20 s budget) keep
+   * every OpenCode pane blank for up to 20 s. `OpencodeTerminalHeadless`
+   * awaits it before opening the durable channel, and holds programmatic
+   * delivery until then (see its `openDurable`). Absent on a launch a host
+   * builds itself with a known `dbPath` (or a known failure).
+   */
+  dbPathPending?: Promise<string>
 }
 
 export type PrepareLaunchOptions = {
@@ -57,18 +75,21 @@ export type PrepareLaunchOptions = {
 
 export async function prepareOpencodeTerminalLaunch(options: PrepareLaunchOptions): Promise<OpencodeTerminalLaunch> {
   const password = randomBytes(24).toString('base64url')
-  const db = await (options.resolveDbPath ?? resolveOpencodeDbPath)({ binary: options.binary, env: options.env, cwd: options.cwd }).then(
-    path => ({ path, error: undefined as string | undefined }),
-    (error: unknown) => ({ path: null, error: error instanceof Error ? error.message : String(error) }),
-  )
-  // WHY the port is allocated last, after the db-path lookup and not beside
-  // it: the probe port is released as soon as it is chosen, and the TUI binds
-  // it only once it boots. Anything else on the machine can take it in
-  // between, and a TUI that loses its port neither exits nor paints (Stage 0).
-  // `opencode db path` runs a Bun child (0.3–2 s on a cold cache); allocating
-  // after it keeps that time out of the window. The rest, until the TUI
-  // binds, cannot be closed from here. A lost port is reported as
-  // `live-state { reason: 'server-unreachable' }`.
+  // Started, not awaited (agent-code#1114). `Promise.resolve().then` turns a
+  // resolver that throws synchronously into a rejection like any other.
+  const dbPathPending = Promise.resolve().then(() => (options.resolveDbPath ?? resolveOpencodeDbPath)({ binary: options.binary, env: options.env, cwd: options.cwd }))
+  // Observed at once: whoever consumes the launch may attach its own handler
+  // later (or never, for a host that ignores the durable channel), and a
+  // rejection nobody had observed yet would otherwise surface as an unhandled
+  // rejection in the host's main process.
+  dbPathPending.catch(() => undefined)
+  // The port is allocated with nothing in front of it now. It used to follow
+  // the lookup so the lookup's 0.3–2 s stayed out of the window between
+  // choosing the port and the TUI binding it (the probe port is released as
+  // soon as it is chosen, and a TUI that loses its port neither exits nor
+  // paints). With the lookup gone from the path that window is simply
+  // shorter. What remains until the TUI binds cannot be closed from here, and
+  // a lost port is reported as `live-state { reason: 'server-unreachable' }`.
   const port = await (options.allocatePort ?? allocateLoopbackPort)()
   const args = ['--session', options.sessionID, '--hostname', SERVER_HOSTNAME, '--port', String(port)]
   if (options.dangerousMode) args.push('--auto')
@@ -84,7 +105,7 @@ export async function prepareOpencodeTerminalLaunch(options: PrepareLaunchOption
     },
     sessionID: options.sessionID,
     server: { url: `http://${SERVER_HOSTNAME}:${port}`, username: SERVER_USERNAME, password },
-    dbPath: db.path,
-    ...(db.error ? { dbPathError: db.error } : {}),
+    dbPath: null,
+    dbPathPending,
   }
 }
