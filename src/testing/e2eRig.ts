@@ -77,8 +77,14 @@ export type RigOverrides = {
    * so a test about "committed after launch" sets launch before them.
    */
   now?: () => number
-  /** A PTY that offers no data subscription (the proof is then unavailable). */
-  ptyWithoutData?: boolean
+  /**
+   * Pass no `tuiOutputSeen` latch (the proof is then unavailable). By default
+   * the rig latches the fake PTY's output at creation, before the headless
+   * exists, as a host does at spawn.
+   */
+  noOutputLatch?: boolean
+  /** Runs after the fake PTY is "spawned" and latched, before the headless is constructed. */
+  onSpawn?: (pty: FakePty) => void
   resyncRetryMs?: number
   /**
    * Share an existing rig's database: same SQLite file and writer, but a new
@@ -151,7 +157,10 @@ export function useReplayRigs(): {
       ...(overrides.dbPathPending ? { dbPathPending: overrides.dbPathPending(dbPath) } : {}),
     }
     const pty = new FakePty()
-    if (overrides.ptyWithoutData) Object.defineProperty(pty, 'onData', { value: undefined })
+    // Latched at "spawn", before the headless is constructed, as a host does.
+    let tuiOutput = false
+    pty.onData(() => { tuiOutput = true })
+    overrides.onSpawn?.(pty)
     const headless = new OpencodeTerminalHeadless({
       pty,
       cwd: '/sandbox/project',
@@ -165,6 +174,7 @@ export function useReplayRigs(): {
       resyncRetryMs: overrides.resyncRetryMs ?? 20,
       ...(overrides.openStore ? { openStore: overrides.openStore } : {}),
       ...(overrides.now ? { now: overrides.now } : {}),
+      ...(overrides.noOutputLatch ? {} : { tuiOutputSeen: () => tuiOutput }),
       ...(overrides.resolveDbPath ? { resolveDbPath: overrides.resolveDbPath } : {}),
       ...(overrides.dbPathRetryDelaysMs ? { dbPathRetryDelaysMs: overrides.dbPathRetryDelaysMs } : {}),
     })

@@ -79,6 +79,22 @@ export type OpencodeTerminalHeadlessOptions = {
   resolveDbPath?: () => Promise<string>
   /** Delays before each `resolveDbPath` attempt, and by their count how many. */
   dbPathRetryDelaysMs?: readonly number[]
+  /**
+   * Has the TUI produced any PTY output since it was SPAWNED? Latched by the
+   * host, which subscribes to the PTY's data at spawn (agent-code#1114).
+   *
+   * WHY the host and not this class (#10 recheck a and b): a data subscription
+   * does not replay, and this class is constructed some time after the spawn,
+   * so "no output since I subscribed" could not prove "no output since spawn".
+   * Only the caller that spawned the PTY can say that.
+   *
+   * WHY it matters: OpenCode commits a message only after its TUI takes input,
+   * and it takes input only after it has painted. So a reader that positions
+   * while this still says false cannot have missed anything. Without it (not
+   * passed), the answer is unknown, and a launch-window gap is reported as
+   * possible.
+   */
+  tuiOutputSeen?: () => boolean
   /** How long to wait for the TUI's server before reporting `server-unreachable`. */
   liveConnectDeadlineMs?: number
   heartbeatMs?: number
@@ -909,10 +925,10 @@ export class OpencodeTerminalHeadless extends EventEmitter {
    * window, and a clock can step backwards, so `time.created` cannot prove
    * that nothing was committed. What can: nothing is committed before the TUI
    * takes input, and it takes input only after it has painted. Positioning
-   * before the first output is therefore complete; after it (or when the PTY
-   * cannot tell us), a gap is POSSIBLE and is reported as such. The host
-   * heals it by re-reading history, which admits only rows it does not hold
-   * (Agent Code #1117).
+   * while the host's spawn-time latch (`tuiOutputSeen`) still says no output
+   * is therefore complete. After the first output, or with no latch, a gap is
+   * POSSIBLE and is reported as such. The host heals it by re-reading
+   * history, which admits only rows it does not hold (Agent Code #1117).
    *
    * Cost: in a restore storm, where the lookup outlasts the TUI's boot, the
    * report fires even when the user typed nothing, and the host does one
@@ -921,7 +937,9 @@ export class OpencodeTerminalHeadless extends EventEmitter {
   private onReaderPositioned(): void {
     if (this.checkLaunchWindowOnPosition) {
       this.checkLaunchWindowOnPosition = false
-      if (this.binding.outputSeen() !== false) {
+      // Only a host-latched `false` proves nothing was committed; `true` and
+      // "not provided" both leave a gap possible.
+      if (this.options.tuiOutputSeen?.() !== false) {
         this.lateRecoveryUnreported = true
         this.reportLateRecovery()
       }

@@ -279,13 +279,29 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
   })
 
-  // Without a data subscription the ordering cannot be proven, so the gap is
-  // reported rather than assumed away.
-  it('reports a possible gap when the PTY cannot say whether the TUI painted', async () => {
+  // #10 recheck a and b: the TUI painted BEFORE the headless was constructed.
+  // A subscription made by the headless would have missed it; the host's
+  // spawn-time latch did not.
+  it('reports a gap when the TUI painted before the headless existed', async () => {
     const recording = loadLiveFixture('plain.json')
     let release!: () => void
     const r = await rig(recording, {
-      ptyWithoutData: true,
+      onSpawn: pty => pty.output(),
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+    })
+    await startConnected(r)
+    await replay(r, buildReplayScript(recording))
+    release()
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'db_path_recovered_late'), 3000, 'late-open report')
+  })
+
+  // Without the host's spawn-time latch the ordering cannot be proven, so the
+  // gap is reported rather than assumed away.
+  it('reports a possible gap when the host passes no output latch', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    const r = await rig(recording, {
+      noOutputLatch: true,
       dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
     })
     await startConnected(r)

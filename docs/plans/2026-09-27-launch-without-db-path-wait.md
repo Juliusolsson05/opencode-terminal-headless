@@ -60,3 +60,8 @@ Package tests drive the real headless with a fake PTY and store. The app side is
   - Considered and rejected: a persisted cursor or message baseline read before the TUI can write. It needs the database path, which is exactly the slow lookup. Deriving the path without the CLI is rejected in `dbPath.ts`.
 - **Pinned in real SQLite:** a painted TUI then a replayed turn; the same with the launch clock after every row (the pre-launch-message and backward-clock shapes q94 names); a turn with `/event` refused throughout; a PTY without `onData`; delivery held through a BUSY open and through a BUSY positioning read.
 - **Residual (unchanged from before this PR):** a second writer on a resumed session can commit between the host's history load and a BUSY-deferred positioning. `DurableReader` documents it.
+- **Recheck a/b (`babe89c`): the binding subscribed to the PTY's data only when the headless was constructed, and `onData` does not replay.** A TUI that painted before construction read as "no output", so a commit went unreported. The API never required construction in the spawn tick.
+  - **Ruling:** the proof belongs to the caller that spawned the PTY. The headless option `tuiOutputSeen` is latched by the host at spawn. Only a host-latched `false` proves the window empty; `true` or no latch reports a possible gap.
+  - The binding's own data subscription (and `PtyLike.onData`) is removed again, so there is one mechanism, not two.
+  - Test: output emitted between spawn and construction (the rig's `onSpawn` hook) is reported. It fails on `babe89c`.
+  - Agent Code's bump PR must pass the latch from `opencodeTerminalSession.ts`, which already subscribes to data at spawn. Without it, every pane with a pending lookup reports a possible gap.
