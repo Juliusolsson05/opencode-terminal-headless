@@ -244,6 +244,47 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(errors[0]?.error.message).toContain('could take input before the database path was known after launch')
   })
 
+  // #11 review a (survivor): the launch-window report must wait for the
+  // reader to POSITION, like the ladder's. A report made when the pending
+  // lookup lands would trigger the host's one history heal while the first
+  // cursor read is still BUSY; a turn committed in that gap lands behind the
+  // eventual head, with no second heal.
+  it('reports a launch-window gap only after a BUSY positioning read clears', async () => {
+    const recording = loadLiveFixture('plain.json')
+    let release!: () => void
+    let busy = true
+    let okReads = 0
+    const r = await rig(recording, {
+      dbPathPending: path => new Promise<string>(resolve => { release = () => resolve(path) }),
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        const read = store.read.bind(store)
+        return Object.assign(store, {
+          read: <T,>(fn: Parameters<typeof read<T>>[0]): T => {
+            if (busy) throw new OpencodeStoreError('busy', 'database is locked')
+            okReads += 1
+            return read(fn)
+          },
+        })
+      },
+    })
+    const reportedAfterReads: number[] = []
+    r.headless.on('transcript-error', error => {
+      if (error.code === 'db_path_recovered_late') reportedAfterReads.push(okReads)
+    })
+    await startConnected(r)
+    r.pty.output()
+    release()
+    await settle()
+    // A turn commits while the reader still cannot position.
+    await replay(r, buildReplayScript(recording))
+    expect(reportedAfterReads).toEqual([])
+    busy = false
+    await waitUntil(() => reportedAfterReads.length > 0, 3000, 'late-open report')
+    expect(reportedAfterReads[0]).toBeGreaterThan(0)
+    expect(reportedAfterReads).toHaveLength(1)
+  })
+
   // #10 verification a/b: the time check was fooled by (1) a message created
   // before launch and completed inside the window, and (2) a clock that
   // stepped backwards. Neither matters now: a launch clock set AFTER every
