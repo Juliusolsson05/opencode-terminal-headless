@@ -596,9 +596,11 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     this.reader = reader
     reader.start()
     if (this.isClosed()) return
-    // After start(), so the reader has positioned at the head the report
-    // describes, and a host that reloads on it reads from after that seed.
-    this.reportLateRecovery()
+    // The late-recovery report is NOT made here (#1397 review b and c): a
+    // BUSY first cursor read makes `start()` return before the reader has
+    // positioned, and a host that heals on the report would re-read history
+    // too early. A turn committed before the retry then landed behind the new
+    // head with no second report. It comes from `onReaderPositioned` instead.
     // The live channel may have connected while the open was being retried.
     // WHY the stream's own state and not `liveState`: `liveState` is what was
     // last REPORTED; the transport is the one owner of connectivity. Telling
@@ -939,11 +941,13 @@ export class OpencodeTerminalHeadless extends EventEmitter {
       this.checkLaunchWindowOnPosition = false
       // Only a host-latched `false` proves nothing was committed; `true` and
       // "not provided" both leave a gap possible.
-      if (this.options.tuiOutputSeen?.() !== false) {
-        this.lateRecoveryUnreported = true
-        this.reportLateRecovery()
-      }
+      if (this.options.tuiOutputSeen?.() !== false) this.lateRecoveryUnreported = true
     }
+    // Every late-recovery report (the launch window above, and the retry
+    // ladder's `openDurableAfterRecovery`) is made HERE, once the reader has
+    // chosen its head. A host that heals by re-reading history on it then
+    // reads everything behind that head (#1397 review b and c).
+    this.reportLateRecovery()
     this.openDurableGate()
   }
 
