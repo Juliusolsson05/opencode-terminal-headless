@@ -419,6 +419,27 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(codes).not.toContain('db_path_recovered_late')
   })
 
+  // #1397 review a (survivor P3): with a pending launch lookup, delivery is
+  // held until the reader positions. A reader whose first positioning read
+  // fails permanently never positions, so its failure must release delivery:
+  // a dark channel is reported on its own and must not also cost every
+  // prompt on the pane its full deadline.
+  it('releases delivery when the reader\'s first positioning read fails after a pending lookup', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, {
+      dbPathPending: async path => path,
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        return Object.assign(store, {
+          read: (): never => { throw new OpencodeStoreError('read_failed', 'disk I/O error') },
+        })
+      },
+    })
+    await startConnected(r)
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'read_failed'), 3000, 'reader failure')
+    expect(await r.headless.submitPrompt('despite a dark reader', { timeoutMs: 1500 })).toEqual({ ok: true })
+  })
+
   it('names the rows it lost when the database path arrives late', async () => {
     // #1114 review R1-F1/R2-F2. The headline recovery test below replays only
     // AFTER the retry lands, which is the one ordering in which completeness is
