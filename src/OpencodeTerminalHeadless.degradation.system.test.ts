@@ -393,6 +393,32 @@ describe('OpencodeTerminalHeadless degrading honestly', () => {
     expect(reportedAfterReads).toHaveLength(1)
   })
 
+  // #11 review c (survivor): the late report is tied to POSITIONING, so a
+  // reader that never positions must never claim a recovery. A report from
+  // the reader's error path would tell the host "healed, re-read history" for
+  // a channel that is dark; the host's heal would then pass and the reader's
+  // own failure would read as a stale second opinion.
+  it('reports no late recovery when the recovered store\'s first positioning read fails', async () => {
+    const recording = loadLiveFixture('plain.json')
+    const r = await rig(recording, {
+      dbPath: null,
+      dbPathRetryDelaysMs: [5],
+      resolveDbPath: async () => r.dbPath,
+      openStore: path => {
+        const store = openOpencodeStore(path)
+        return Object.assign(store, {
+          read: (): never => { throw new OpencodeStoreError('read_failed', 'disk I/O error') },
+        })
+      },
+    })
+    await startConnected(r)
+    await waitUntil(() => r.log.some(e => e.kind === 'error' && e.error.code === 'read_failed'), 3000, 'reader failure')
+    await settle()
+    const codes = r.log.flatMap(e => (e.kind === 'error' ? [e.error.code] : []))
+    expect(codes).toContain('db_path_retrying')
+    expect(codes).not.toContain('db_path_recovered_late')
+  })
+
   it('names the rows it lost when the database path arrives late', async () => {
     // #1114 review R1-F1/R2-F2. The headline recovery test below replays only
     // AFTER the retry lands, which is the one ordering in which completeness is

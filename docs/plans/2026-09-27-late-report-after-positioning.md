@@ -14,3 +14,6 @@ After the retry ladder recovers the database path, `openDurableAfterRecovery` se
 
 ## Test
 `OpencodeTerminalHeadless.degradation.system.test.ts`, real SQLite replay rig: pending path → ladder recovery → the store opens with BUSY positioning reads → a recorded turn is committed → reads succeed. The report must not arrive before a successful read, and must arrive exactly once after it. Red at `7a009541` (the report arrived with zero successful reads).
+
+## Review round 1 (b and c: MERGE-READY)
+- **c (survivor):** a late-recovery report from the reader's error path survived the suite. Pinned: when the recovered store's first positioning read fails permanently, the log shows `db_path_retrying` and `read_failed`, and no `db_path_recovered_late`. The test fails with that mutation applied.
