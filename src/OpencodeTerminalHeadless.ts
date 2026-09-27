@@ -642,6 +642,9 @@ export class OpencodeTerminalHeadless extends EventEmitter {
     // renderer can supersede; the permanent code is emitted only once the
     // ladder is spent and the claim is true again.
     if (this.dbPathRecoveryAttempt === 0) {
+      // The pending lookup's own failure first: it is the newer and more
+      // specific reason. `launch.dbPathError` is for launches a host builds
+      // itself, which carry no pending lookup (och#10 review c).
       const detail = this.dbPathPendingError ?? this.launch.dbPathError ?? 'OpenCode database path is unavailable'
       if (willRetry) this.reportError('durable', 'db_path_retrying', `${detail}. Retrying in the background; this pane has no committed transcript until it succeeds.`)
       else this.reportError('durable', 'db_path_unavailable', detail)

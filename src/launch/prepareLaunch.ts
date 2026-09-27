@@ -42,6 +42,11 @@ export type OpencodeTerminalLaunch = {
    * behaviour — the durable channel stays disabled and says so.
    */
   dbPath: string | null
+  /**
+   * Why the path is null, for a launch a host builds itself. Never set by
+   * `prepareOpencodeTerminalLaunch` since agent-code#1114: its failed lookup
+   * is a rejected `dbPathPending`, and the headless reports that reason.
+   */
   dbPathError?: string
   /**
    * The database-path lookup still in flight when the launch was returned
